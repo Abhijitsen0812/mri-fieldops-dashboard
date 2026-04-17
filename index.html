@@ -6,6 +6,7 @@
 <title>FieldOps · Medical Imaging — v7 (Data Correctness Pass)</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{--bg:#0a0e17;--surface:#111827;--surface2:#1a2235;--surface3:#1f2d44;--border:#243044;--brand:#3b82f6;--brand-dim:#1d4ed8;--accent:#06b6d4;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--text:#e2e8f0;--text-dim:#94a3b8;--text-faint:#4b5a72;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;--display:'Syne',sans-serif;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -152,9 +153,72 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
 .pag-info{font-family:var(--mono);font-size:10px;color:var(--text-faint);padding:10px 18px;border-top:1px solid var(--border);}
+  .login-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    background: var(--bg); display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 40px; width: 380px; max-width: 90vw;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  .login-card h1 { margin: 0 0 4px; font-size: 20px; color: var(--text); }
+  .login-card .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+  .login-card input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 14px;
+    box-sizing: border-box;
+  }
+  .login-card button {
+    width: 100%; padding: 10px; border: none; border-radius: 6px;
+    background: var(--brand); color: white; font-size: 14px; font-weight: 600;
+    cursor: pointer; margin-top: 4px;
+  }
+  .login-card button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-error { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .login-card .footer-note {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-dim); line-height: 1.5;
+  }
+  .loading-overlay {
+    position: fixed; inset: 0; z-index: 99998;
+    background: var(--bg); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+  }
+  .loading-spinner {
+    width: 40px; height: 40px; border: 3px solid var(--border);
+    border-top-color: var(--brand); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-dim); font-size: 14px; }
 </style>
 </head>
 <body>
+
+<!-- LOGIN OVERLAY (shown until authenticated) -->
+<div id="login-overlay" class="login-overlay" style="display:none">
+  <div class="login-card">
+    <h1>MRI FieldOps</h1>
+    <div class="sub">3i MEDTECH · Sign in to continue</div>
+    <form id="login-form" autocomplete="on">
+      <input type="email" id="login-email" placeholder="Email" required autocomplete="username">
+      <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
+      <button type="submit" id="login-submit">Sign in</button>
+      <div id="login-error" class="login-error"></div>
+    </form>
+    <div class="footer-note">
+      Don't have an account? Ask your admin to add you in Supabase Auth.
+    </div>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY (shown while fetching data) -->
+<div id="loading-overlay" class="loading-overlay" style="display:none">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Loading data…</div>
+</div>
 
 <aside class="sidebar">
   <div class="logo">
@@ -189,9 +253,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
   <input type="file" id="xlsx-upload" accept=".xlsx" style="display:none" onchange="handleXLSXUpload(event)">
   <button class="btn btn-ghost" style="font-size:11px;padding:6px 12px" onclick="document.getElementById('xlsx-upload').click()" title="Upload service operations Excel file">📤 Upload XLSX</button>
-  <button class="btn btn-ghost" id="reset-data-btn" style="font-size:11px;padding:6px 12px;display:none" onclick="resetToBundledData()" title="Revert to bundled dataset">↺ Reset</button>
+  <button class="btn btn-ghost" id="reset-data-btn" style="font-size:11px;padding:6px 12px" onclick="resetToBundledData()" title="Refresh data from database">↻ Refresh</button>
   <div class="clock" id="clock">—</div>
-  <div class="notif-btn">🔔<div class="notif-pip"></div></div>
+  <div id="user-menu" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim)">
+    <span id="user-email" style="font-family:var(--mono)"></span>
+    <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px" onclick="handleLogout()" title="Sign out">Sign out</button>
+  </div>
 </header>
 
 <main class="main"><div class="content">
@@ -590,21 +657,14 @@ const ENGINEERS_DEFAULT = [
   });
 })();
 
-// Load roster from localStorage if present, otherwise use defaults
-let ENGINEERS = (function(){
-  try{
-    const raw = localStorage.getItem('fieldops_roster');
-    if(raw){
-      const parsed = JSON.parse(raw);
-      if(Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  }catch(e){}
-  return JSON.parse(JSON.stringify(ENGINEERS_DEFAULT));
-})();
+// ENGINEERS is loaded from Supabase in loadAllFromDB() after authentication.
+// This default is only used if loadAllFromDB hasn't run yet (e.g. during
+// early module init of code that references ENGINEERS).
+let ENGINEERS = JSON.parse(JSON.stringify(ENGINEERS_DEFAULT));
 
-function saveRoster(){
-  try{ localStorage.setItem('fieldops_roster', JSON.stringify(ENGINEERS)); }catch(e){}
-}
+// saveRoster is now a no-op; individual engineer writes go through
+// dbSaveEngineer/dbDeleteEngineer at the call sites.
+function saveRoster(){ /* moved to Supabase — see dbSaveEngineer */ }
 
 let AMBIGUITIES = [
 {month:'—',row:0,id:'⚠FLAG-01',customer:'Premier Trichy = Anderson Diagnostic Centre?',issue:'Log uses "Premier Trichy" in Oct 2025 rows 20,21. Config has "Anderson diagnostic centre, Trichy, AN011". No asset named Premier in config. Assumed same site — CONFIRM before accepting.',status:'Review Required',sys_status:'—',flags:['Log uses "Premier Trichy" in Oct 2025 rows 20,21. Config has "Anderson diagnostic centre, Trichy, AN011". No asset named Premier in config. Assumed same site — CONFIRM before accepting.'],suggestion:'Action required — do not close until confirmed.'},
@@ -1158,7 +1218,7 @@ function showUploadPreview(result, fileName){
   document.getElementById('upload-modal').classList.add('open');
 }
 
-function applyUploadedData(){
+async function applyUploadedData(){
   if(!_pendingUploadResult){ closeModal('upload-modal'); return; }
   const r = _pendingUploadResult;
 
@@ -1170,66 +1230,101 @@ function applyUploadedData(){
     return;
   }
 
-  // Replace tickets
-  RAW_TICKETS = r.allTickets;
-  // Recompute derived sets
-  OPEN_TICKETS = RAW_TICKETS.filter(isOpen);
-  CLOSED_TICKETS = RAW_TICKETS.filter(isClosed);
-  INCIDENT_TICKETS = RAW_TICKETS.filter(isIncident);
-  PM_CALLS = RAW_TICKETS.filter(isPM);
-  // Rebuild MONTHS from data
-  MONTHS = [...new Set(RAW_TICKETS.map(t=>t.month))]
-    .sort((a,b) => new Date('01 '+a) - new Date('01 '+b));
-  MONTH_SHORT = MONTHS.map(m => m.split(' ')[0].slice(0,3));
-
-  // Replace install base if Configuration sheet was present
-  if(r.config && r.config.length > 0){
-    CONFIG_ASSETS = r.config;
-  }
-  // Replace CMC data if present
-  if(r.cmc && r.cmc.length > 0){
-    CMC_DATA = r.cmc;
-  }
-
-  // Recompute open/total per asset
-  CONFIG_ASSETS.forEach(a => {
-    a.total_calls = RAW_TICKETS.filter(t => t.asset_code === a.code).length;
-    a.open_calls = RAW_TICKETS.filter(t => t.asset_code === a.code && isOpen(t)).length;
-  });
-
-  // Persist to localStorage
-  try {
-    const payload = JSON.stringify({
-      tickets: RAW_TICKETS, config: CONFIG_ASSETS, cmc: CMC_DATA,
-      uploadedAt: new Date().toISOString(),
-      sourceFile: r.sourceFile || 'uploaded.xlsx',
-    });
-    localStorage.setItem('fieldops_dataset', payload);
-  } catch(e){
-    // Quota exceeded — try to clear the old entry so at least reload returns clean state
-    console.warn('Could not persist dataset (likely localStorage quota):', e);
-    try { localStorage.removeItem('fieldops_dataset'); } catch(e2){}
-    alert(`Data applied successfully (${RAW_TICKETS.length} tickets), but is too large for browser storage (limit ~5 MB). The data will be lost on page reload.\n\nTo keep it, export from the dashboard before closing, or use a backend storage solution.`);
-  }
-
-  // Update UI label and reset button visibility
-  const dl = document.getElementById('dataset-label');
-  if(dl) dl.textContent = `UPLOADED · ${MONTHS[0]} – ${MONTHS[MONTHS.length-1]} · ${RAW_TICKETS.length} tickets`;
-  const rb = document.getElementById('reset-data-btn');
-  if(rb) rb.style.display = 'inline-block';
-
+  // Show loading while we push to Supabase
   closeModal('upload-modal');
-  _pendingUploadResult = null;
+  showLoading(`Saving ${r.allTickets.length} tickets to database…`);
 
-  // Re-render everything
-  renderAll();
+  try {
+    // 1. Write config assets (if any new ones appeared)
+    if(r.config && r.config.length > 0){
+      const configRows = r.config.map(a => ({
+        code: a.code, ast_id: a.ast_id || null, name: a.name,
+        tesla: a.tesla || null, model: a.model || null,
+        town: a.town || null, state: a.state || null,
+        channel: a.channel || null, gradient: a.gradient || null,
+        sw: a.sw || null, compressor: a.compressor || null,
+        coldhead: a.coldhead || null,
+        alias_of: a._alias_of || null,
+      }));
+      const { error } = await _sb.from('config_assets').upsert(configRows);
+      if(error) throw error;
+    }
+
+    // 2. Write CMC contracts
+    if(r.cmc && r.cmc.length > 0){
+      // CMC uses an auto-uuid pk, so we delete and reinsert for this upload
+      await _sb.from('cmc_contracts').delete().neq('sn', -99999);
+      const cmcRows = r.cmc.map(c => ({
+        sn: c.sn, customer: c.customer, town: c.town || null,
+        model: c.model || null, contract: c.contract || null,
+        start_date: displayToDbDate(c.start),
+        end_date: displayToDbDate(c.end),
+      }));
+      const { error } = await _sb.from('cmc_contracts').insert(cmcRows);
+      if(error) throw error;
+    }
+
+    // 3. Bulk upsert all tickets
+    showLoading(`Uploading ${r.allTickets.length} tickets…`);
+    await dbBulkUpsertTickets(r.allTickets);
+
+    // 4. Log the upload
+    await _sb.from('upload_log').insert({
+      uploaded_by: _currentUser ? _currentUser.id : null,
+      source_file: r.sourceFile || 'uploaded.xlsx',
+      ticket_count: r.allTickets.length,
+      months: [...new Set(r.allTickets.map(t => t.month))],
+    });
+
+    // 5. Update in-memory state
+    RAW_TICKETS = r.allTickets;
+    OPEN_TICKETS = RAW_TICKETS.filter(isOpen);
+    CLOSED_TICKETS = RAW_TICKETS.filter(isClosed);
+    INCIDENT_TICKETS = RAW_TICKETS.filter(isIncident);
+    PM_CALLS = RAW_TICKETS.filter(isPM);
+    MONTHS = [...new Set(RAW_TICKETS.map(t=>t.month))]
+      .sort((a,b) => new Date('01 '+a) - new Date('01 '+b));
+    MONTH_SHORT = MONTHS.map(m => m.split(' ')[0].slice(0,3));
+    if(r.config && r.config.length > 0) CONFIG_ASSETS = r.config;
+    if(r.cmc && r.cmc.length > 0) CMC_DATA = r.cmc;
+    CONFIG_ASSETS.forEach(a => {
+      a.total_calls = RAW_TICKETS.filter(t => t.asset_code === a.code).length;
+      a.open_calls = RAW_TICKETS.filter(t => t.asset_code === a.code && isOpen(t)).length;
+    });
+
+    hideLoading();
+
+    // Update UI label
+    const dl = document.getElementById('dataset-label');
+    if(dl) dl.textContent = `UPLOADED · ${MONTHS[0]} – ${MONTHS[MONTHS.length-1]} · ${RAW_TICKETS.length} tickets`;
+    const rb = document.getElementById('reset-data-btn');
+    if(rb) rb.style.display = 'inline-block';
+
+    _pendingUploadResult = null;
+    renderAll();
+
+    alert(`Successfully saved ${RAW_TICKETS.length} tickets to the database. All team members will see the updated data on their next refresh.`);
+
+  } catch(e){
+    hideLoading();
+    console.error('Upload save failed:', e);
+    alert('Failed to save upload to database:\n\n' + (e.message || e) +
+          '\n\nThe in-memory data has NOT been updated. Please check your connection and try again.');
+    _pendingUploadResult = null;
+  }
 }
 
-function resetToBundledData(){
-  if(!confirm('Reset to the original bundled dataset? Your uploaded data will be removed.')) return;
-  try { localStorage.removeItem('fieldops_dataset'); } catch(e){}
-  // Reload the page to restore bundled data cleanly
-  location.reload();
+async function resetToBundledData(){
+  if(!confirm('Reload all data from the database? Any unsaved local changes will be discarded.')) return;
+  try {
+    showLoading('Refreshing from database…');
+    await loadAllFromDB();
+    hideLoading();
+    renderAll();
+  } catch(e){
+    hideLoading();
+    alert('Refresh failed: ' + (e.message || e));
+  }
 }
 
 function renderAll(){
@@ -1266,34 +1361,8 @@ function renderAll(){
   if(an) an.textContent = AMBIGUITIES.length;
 }
 
-// Auto-load uploaded dataset on page open if present
-(function loadSavedDataset(){
-  try {
-    const raw = localStorage.getItem('fieldops_dataset');
-    if(!raw) return;
-    const saved = JSON.parse(raw);
-    if(saved && Array.isArray(saved.tickets) && saved.tickets.length > 0){
-      RAW_TICKETS = saved.tickets;
-      if(saved.config) CONFIG_ASSETS = saved.config;
-      if(saved.cmc) CMC_DATA = saved.cmc;
-      OPEN_TICKETS = RAW_TICKETS.filter(isOpen);
-      CLOSED_TICKETS = RAW_TICKETS.filter(isClosed);
-      INCIDENT_TICKETS = RAW_TICKETS.filter(isIncident);
-      PM_CALLS = RAW_TICKETS.filter(isPM);
-      MONTHS = [...new Set(RAW_TICKETS.map(t=>t.month))].sort((a,b) => new Date('01 '+a) - new Date('01 '+b));
-      MONTH_SHORT = MONTHS.map(m => m.split(' ')[0].slice(0,3));
-      // Defer DOM updates to after first paint
-      setTimeout(() => {
-        const dl = document.getElementById('dataset-label');
-        if(dl) dl.textContent = `UPLOADED · ${MONTHS[0]} – ${MONTHS[MONTHS.length-1]} · ${RAW_TICKETS.length} tickets`;
-        const rb = document.getElementById('reset-data-btn');
-        if(rb) rb.style.display = 'inline-block';
-      }, 0);
-    }
-  } catch(e){
-    console.warn('Could not load saved dataset:', e);
-  }
-})();
+// Note: dataset auto-load from localStorage was removed when this dashboard
+// migrated to Supabase. All data now flows through loadAllFromDB() after login.
 
 function engCallCount(){
   const c={};
@@ -2265,7 +2334,7 @@ FieldOps Service Manager`);
   window.open(mailtoUrl, '_blank');
 }
 
-function markPMDone(pmId){
+async function markPMDone(pmId){
   const pm = PM_SCHEDULE.find(p=>p.id===pmId);
   if(!pm) return;
   const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -2280,7 +2349,16 @@ function markPMDone(pmId){
     pm.nextPMS = next.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
   }
   pm.status = 'active';
+  // Persist to Supabase
+  await dbSavePM(pm);
   renderPM();
+  // Update nav badge
+  const pb = document.getElementById('nb-pm');
+  if(pb){
+    const urgent = PM_SCHEDULE.filter(p => {const s=pmStatus(p); return s.code==='overdue'||s.code==='in-window';}).length;
+    pb.textContent = urgent;
+    pb.className = 'nav-badge ' + (urgent > 0 ? '' : 'green');
+  }
 }
 
 // ══════════════════════════════════════════
@@ -2438,7 +2516,7 @@ function toggleAddEngineerForm(){
   }
 }
 
-function addEngineer(){
+async function addEngineer(){
   const name = document.getElementById('new-eng-name').value.trim();
   const region = document.getElementById('new-eng-region').value.trim();
   const email = document.getElementById('new-eng-email').value.trim();
@@ -2453,8 +2531,10 @@ function addEngineer(){
   const aliases = aliasesRaw
     ? aliasesRaw.split(',').map(s=>s.trim()).filter(Boolean)
     : [];
-  ENGINEERS.push({id, name, region, email, aliases});
-  saveRoster();
+  const newEng = {id, name, region, email, aliases};
+  // Persist to DB first; only update UI if DB write succeeds
+  await dbSaveEngineer(newEng);
+  ENGINEERS.push(newEng);
   // Clear form
   ['new-eng-name','new-eng-region','new-eng-email','new-eng-aliases'].forEach(id=>{
     const el = document.getElementById(id);
@@ -2468,22 +2548,27 @@ function addEngineer(){
   if(teamBadge) teamBadge.textContent = ENGINEERS.length;
 }
 
-function removeEngineer(id){
+async function removeEngineer(id){
   const eng = ENGINEERS.find(e=>e.id===id);
   if(!eng) return;
   if(!confirm(`Remove "${eng.name}" from the roster? This does not delete any tickets — only the roster entry.`)) return;
+  await dbDeleteEngineer(id);
   ENGINEERS = ENGINEERS.filter(e=>e.id!==id);
-  saveRoster();
   renderTeam();
   renderDashEngineers();
   const teamBadge = document.getElementById("nb-team");
   if(teamBadge) teamBadge.textContent = ENGINEERS.length;
 }
 
-function resetRoster(){
-  if(!confirm('Reset the engineer roster to the original default list? Any added engineers will be removed.')) return;
+async function resetRoster(){
+  if(!confirm('Reset the engineer roster to the original default list? Any added engineers will be removed from the database.')) return;
+  // Delete extras from DB, then re-insert defaults
+  const defaultIds = new Set(ENGINEERS_DEFAULT.map(e => e.id));
+  const toRemove = ENGINEERS.filter(e => !defaultIds.has(e.id));
+  for(const e of toRemove) await dbDeleteEngineer(e.id);
+  // Upsert defaults (fixes any drift)
+  for(const e of ENGINEERS_DEFAULT) await dbSaveEngineer(e);
   ENGINEERS = JSON.parse(JSON.stringify(ENGINEERS_DEFAULT));
-  try{ localStorage.removeItem('fieldops_roster'); }catch(e){}
   renderTeam();
   renderDashEngineers();
   const teamBadge = document.getElementById("nb-team");
@@ -2491,16 +2576,31 @@ function resetRoster(){
 }
 
 // ══════════════════════════════════════════
-// FIX 6 — Ambiguity review with localStorage
+// Ambiguity review — persisted in Supabase on the AMBIGUITIES.review jsonb column
 // ══════════════════════════════════════════
 function getAmbReview(ambId){
-  try{
-    const raw=localStorage.getItem(`amb_review_${ambId}`);
-    return raw?JSON.parse(raw):null;
-  }catch(e){return null;}
+  const a = AMBIGUITIES.find(x => x.id === ambId);
+  return (a && a.review) ? a.review : null;
 }
-function saveAmbReview(ambId,data){
-  try{localStorage.setItem(`amb_review_${ambId}`,JSON.stringify(data));}catch(e){}
+async function saveAmbReview(ambId, data){
+  const a = AMBIGUITIES.find(x => x.id === ambId);
+  if(!a) return;
+  a.review = data;
+  a._resolution = data.decision + ' — ' + data.notes;
+  // Push to Supabase (wrap dbSaveAmbiguity with review payload)
+  try {
+    const { error } = await _sb.from('ambiguities').update({
+      review: data,
+      resolution: a._resolution,
+      resolved_at: new Date().toISOString(),
+      resolved_by: _currentUser ? _currentUser.id : null,
+    }).eq('id', ambId);
+    if(error) throw error;
+  } catch(e){
+    console.error('Save ambiguity review failed:', e);
+    alert('Save failed: ' + (e.message || e));
+    delete a.review;  // revert in-memory change
+  }
 }
 function getAmbStats(){
   let reviewed=0,confirmed=0,fp=0,resolved=0;
@@ -2616,17 +2716,29 @@ function checkReviewReady(i){
   btn.style.opacity=ready?'1':'0.4';
   btn.style.cursor=ready?'pointer':'not-allowed';
 }
-function submitReview(i,ambId){
+async function submitReview(i,ambId){
   const reviewer=document.getElementById(`rp-reviewer-${i}`).value;
   const dec=document.querySelector(`input[name="rp-dec-${i}"]:checked`)?.value;
   const notes=document.getElementById(`rp-notes-${i}`).value;
   if(!reviewer||!dec||notes.length<30) return;
-  saveAmbReview(ambId,{reviewer,decision:dec,notes,timestamp:new Date().toISOString()});
+  await saveAmbReview(ambId,{reviewer,decision:dec,notes,timestamp:new Date().toISOString()});
   renderAmbiguities();
 }
-function undoReview(ambId){
-  try{localStorage.removeItem(`amb_review_${ambId}`);}catch(e){}
-  renderAmbiguities();
+async function undoReview(ambId){
+  const a = AMBIGUITIES.find(x => x.id === ambId);
+  if(!a) return;
+  try {
+    const { error } = await _sb.from('ambiguities').update({
+      review: null, resolution: null, resolved_at: null, resolved_by: null,
+    }).eq('id', ambId);
+    if(error) throw error;
+    delete a.review;
+    delete a._resolution;
+    renderAmbiguities();
+  } catch(e){
+    console.error('Undo review failed:', e);
+    alert('Undo failed: ' + (e.message || e));
+  }
 }
 
 // ══════════════════════════════════════════
@@ -2795,27 +2907,27 @@ navigate=function(page){
   };
 })();
 
-// First paint
-renderDashMonthTabs();
-renderAlertBanner();
-renderKPIGrid();
-renderDashOpen();
-renderDashEngineers();
-renderBarMonthly();
-renderCallTypeChart();
-renderTopCustomers();
-renderKPIBand();
-buildHistoryTabs();
-renderHistory();
-renderOpen();
-renderPM();
-renderAssets();
-renderTeam();
-renderAmbiguities();
-renderReports();
+// First paint — deferred until after Supabase login and data load
+async function doFirstPaint(){
+  renderDashMonthTabs();
+  renderAlertBanner();
+  renderKPIGrid();
+  renderDashOpen();
+  renderDashEngineers();
+  renderBarMonthly();
+  renderCallTypeChart();
+  renderTopCustomers();
+  renderKPIBand();
+  buildHistoryTabs();
+  renderHistory();
+  renderOpen();
+  renderPM();
+  renderAssets();
+  renderTeam();
+  renderAmbiguities();
+  renderReports();
 
-// Sync dynamic nav badges
-(function(){
+  // Sync dynamic nav badges
   const tb = document.getElementById('nb-team');
   if(tb) tb.textContent = ENGINEERS.length;
   const pb = document.getElementById('nb-pm');
@@ -2823,6 +2935,286 @@ renderReports();
     const urgent = PM_SCHEDULE.filter(pm => {const s=pmStatus(pm); return s.code==='overdue'||s.code==='in-window';}).length;
     pb.textContent = urgent;
     pb.className = 'nav-badge ' + (urgent > 0 ? '' : 'green');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// SUPABASE INTEGRATION
+// ══════════════════════════════════════════════════════════════════════
+const SUPABASE_URL      = 'REPLACE_WITH_YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'REPLACE_WITH_YOUR_ANON_KEY';
+
+let _sb = null;            // Supabase client
+let _currentUser = null;   // logged-in user
+
+function showLogin(){ document.getElementById('login-overlay').style.display = 'flex'; }
+function hideLogin(){ document.getElementById('login-overlay').style.display = 'none'; }
+function showLoading(text){
+  const o = document.getElementById('loading-overlay');
+  const t = document.getElementById('loading-text');
+  if(t && text) t.textContent = text;
+  if(o) o.style.display = 'flex';
+}
+function hideLoading(){
+  const o = document.getElementById('loading-overlay');
+  if(o) o.style.display = 'none';
+}
+
+// Convert a date string (ISO or 'YYYY-MM-DD') from Supabase to the display
+// format the existing code expects.
+function dbDateToDisplay(d){
+  if(!d) return '';
+  // Supabase returns date columns as 'YYYY-MM-DD' strings or ISO timestamps
+  const parsed = new Date(d);
+  if(isNaN(parsed)) return '';
+  const dd = String(parsed.getDate()).padStart(2,'0');
+  const mm = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parsed.getMonth()];
+  const yy = parsed.getFullYear();
+  return `${dd} ${mm} ${yy}`;
+}
+// Convert any date-ish value back to 'YYYY-MM-DD' for Supabase INSERT/UPDATE
+function displayToDbDate(d){
+  const parsed = parseFlexDate(d);
+  if(!parsed) return null;
+  return parsed.toISOString().slice(0,10);
+}
+
+async function loadAllFromDB(){
+  showLoading('Loading engineers…');
+  const { data: engs, error: e1 } = await _sb.from('engineers').select('*').order('id');
+  if(e1) throw e1;
+  ENGINEERS = engs.map(r => ({
+    id: r.id, name: r.name, region: r.region, email: r.email || '',
+    aliases: r.aliases || [],
+  }));
+
+  showLoading('Loading install base…');
+  const { data: assets, error: e2 } = await _sb.from('config_assets').select('*');
+  if(e2) throw e2;
+  CONFIG_ASSETS = assets.map(r => ({
+    code: r.code, ast_id: r.ast_id, name: r.name, tesla: r.tesla, model: r.model,
+    town: r.town, state: r.state, channel: r.channel, gradient: r.gradient,
+    sw: r.sw, compressor: r.compressor, coldhead: r.coldhead,
+    _alias_of: r.alias_of,
+    open_calls: 0, total_calls: 0, // recomputed below
+  }));
+
+  showLoading('Loading CMC contracts…');
+  const { data: cmcs, error: e3 } = await _sb.from('cmc_contracts').select('*').order('sn');
+  if(e3) throw e3;
+  CMC_DATA = cmcs.map(r => ({
+    sn: r.sn, customer: r.customer, town: r.town, model: r.model, contract: r.contract,
+    start: dbDateToDisplay(r.start_date), end: dbDateToDisplay(r.end_date),
+  }));
+
+  showLoading('Loading PM schedule…');
+  const { data: pms, error: e4 } = await _sb.from('pm_schedule').select('*');
+  if(e4) throw e4;
+  PM_SCHEDULE = pms.map(r => ({
+    id: r.id, customer: r.customer, model: r.model, contract: r.contract,
+    town: r.town, region: r.region, freq: r.freq,
+    contractStart: dbDateToDisplay(r.contract_start),
+    contractEnd: dbDateToDisplay(r.contract_end),
+    lastPMS: dbDateToDisplay(r.last_pms),
+    nextPMS: dbDateToDisplay(r.next_pms),
+    status: r.status || 'active',
+  }));
+
+  showLoading('Loading ambiguities…');
+  const { data: ambs, error: e5 } = await _sb.from('ambiguities').select('*');
+  if(e5) throw e5;
+  AMBIGUITIES = ambs.map(r => ({
+    id: r.id, month: r.month || '—', row: r.row_num || 0,
+    customer: r.customer, issue: r.issue, status: r.status,
+    sys_status: r.sys_status || '—',
+    flags: r.flags || [], suggestion: r.suggestion || '',
+    review: r.review || null,
+    _resolution: r.resolution || null,
+  }));
+
+  // Tickets — paginate because Supabase caps at 1000 rows per request
+  showLoading('Loading tickets…');
+  const allTickets = [];
+  let from = 0;
+  const pageSize = 1000;
+  while(true){
+    const { data: pg, error: e6 } = await _sb.from('tickets')
+      .select('*').order('id').range(from, from + pageSize - 1);
+    if(e6) throw e6;
+    allTickets.push(...pg);
+    if(pg.length < pageSize) break;
+    from += pageSize;
+  }
+  RAW_TICKETS = allTickets.map(r => ({
+    id: r.id, month: r.month, src_row: r.src_row,
+    customer_raw: r.customer_raw || '', customer: r.customer || '',
+    asset_code: r.asset_code || '', town: r.town || '', state: r.state || '',
+    contract: r.contract || '',
+    call_date: dbDateToDisplay(r.call_date), call_type: r.call_type || '',
+    model: r.model || '', sys_status: r.sys_status || '',
+    issue: r.issue || '',
+    attended_date: dbDateToDisplay(r.attended_date),
+    engineer: r.engineer || '', parts: r.parts || '',
+    parts_req_date: dbDateToDisplay(r.parts_req_date),
+    parts_recv_date: dbDateToDisplay(r.parts_recv_date),
+    parts_status: r.parts_status || '',
+    sys_up_date: dbDateToDisplay(r.sys_up_date),
+    resolution: r.resolution || '', status: r.status || '',
+    orphaned: !!r.orphaned, unmatched: !!r.unmatched,
+    ambiguities: r.ambiguities || [],
+  }));
+
+  // Recompute derived arrays
+  OPEN_TICKETS = RAW_TICKETS.filter(isOpen);
+  CLOSED_TICKETS = RAW_TICKETS.filter(isClosed);
+  INCIDENT_TICKETS = RAW_TICKETS.filter(isIncident);
+  PM_CALLS = RAW_TICKETS.filter(isPM);
+
+  // Recompute asset call counts
+  CONFIG_ASSETS.forEach(a => {
+    const calls = RAW_TICKETS.filter(t => t.asset_code === a.code);
+    a.total_calls = calls.length;
+    a.open_calls = calls.filter(isOpen).length;
+  });
+
+  console.log(`Loaded: ${RAW_TICKETS.length} tickets, ${CONFIG_ASSETS.length} assets, ${ENGINEERS.length} engineers, ${PM_SCHEDULE.length} PMs`);
+}
+
+// ── Write helpers ─────────────────────────────────────────────────────
+async function dbSaveEngineer(e){
+  const row = {id: e.id, name: e.name, region: e.region, email: e.email || null, aliases: e.aliases || []};
+  const { error } = await _sb.from('engineers').upsert(row);
+  if(error){ console.error('Save engineer failed:', error); alert('Save failed: ' + error.message); }
+}
+async function dbDeleteEngineer(id){
+  const { error } = await _sb.from('engineers').delete().eq('id', id);
+  if(error){ console.error('Delete engineer failed:', error); alert('Delete failed: ' + error.message); }
+}
+async function dbSavePM(pm){
+  const row = {
+    id: pm.id, customer: pm.customer, model: pm.model, contract: pm.contract,
+    town: pm.town, region: pm.region, freq: pm.freq,
+    contract_start: displayToDbDate(pm.contractStart),
+    contract_end: displayToDbDate(pm.contractEnd),
+    last_pms: displayToDbDate(pm.lastPMS),
+    next_pms: displayToDbDate(pm.nextPMS),
+    status: pm.status,
+  };
+  const { error } = await _sb.from('pm_schedule').upsert(row);
+  if(error){ console.error('Save PM failed:', error); alert('Save failed: ' + error.message); }
+}
+async function dbSaveAmbiguity(a){
+  const row = {
+    id: a.id, month: a.month === '—' ? null : a.month,
+    row_num: a.row || 0, customer: a.customer, issue: a.issue,
+    status: a.status, sys_status: a.sys_status,
+    flags: a.flags || [], suggestion: a.suggestion || '',
+    resolution: a._resolution || null,
+  };
+  const { error } = await _sb.from('ambiguities').upsert(row);
+  if(error){ console.error('Save ambiguity failed:', error); }
+}
+async function dbBulkUpsertTickets(tickets){
+  // Convert each ticket to DB shape, then upsert in batches of 500
+  const rows = tickets.map(t => ({
+    id: t.id, month: t.month, src_row: t.src_row,
+    customer_raw: t.customer_raw, customer: t.customer,
+    asset_code: t.asset_code && t.asset_code !== '⚠UNMATCHED' ? t.asset_code : null,
+    town: t.town, state: t.state, contract: t.contract,
+    call_date: displayToDbDate(t.call_date), call_type: t.call_type,
+    model: t.model, sys_status: t.sys_status, issue: t.issue,
+    attended_date: displayToDbDate(t.attended_date),
+    engineer: t.engineer, parts: t.parts,
+    parts_req_date: displayToDbDate(t.parts_req_date),
+    parts_recv_date: displayToDbDate(t.parts_recv_date),
+    parts_status: t.parts_status,
+    sys_up_date: displayToDbDate(t.sys_up_date),
+    resolution: t.resolution, status: t.status,
+    orphaned: !!t.orphaned, unmatched: !!t.unmatched,
+    ambiguities: t.ambiguities || [],
+  }));
+  const batchSize = 500;
+  for(let i=0; i<rows.length; i+=batchSize){
+    const batch = rows.slice(i, i+batchSize);
+    const { error } = await _sb.from('tickets').upsert(batch);
+    if(error){
+      console.error('Bulk upsert batch failed at row', i, error);
+      throw error;
+    }
+  }
+}
+
+// ── Login handling ────────────────────────────────────────────────────
+async function handleLogin(ev){
+  ev.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const pwd = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error');
+  const submitBtn = document.getElementById('login-submit');
+  errBox.textContent = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Signing in…';
+
+  try {
+    const { data, error } = await _sb.auth.signInWithPassword({ email, password: pwd });
+    if(error) throw error;
+    _currentUser = data.user;
+    hideLogin();
+    await bootApp();
+  } catch(e){
+    errBox.textContent = e.message || 'Sign in failed.';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Sign in';
+  }
+}
+
+async function handleLogout(){
+  if(!_sb) return;
+  await _sb.auth.signOut();
+  location.reload();
+}
+
+async function bootApp(){
+  try {
+    showLoading('Loading data…');
+    await loadAllFromDB();
+    hideLoading();
+    // Show logged-in user in topbar
+    const ue = document.getElementById('user-email');
+    if(ue && _currentUser) ue.textContent = _currentUser.email || '';
+    await doFirstPaint();
+  } catch(e){
+    hideLoading();
+    console.error('Boot failed:', e);
+    alert('Failed to load data from the database.\n\n' + (e.message || e) +
+          '\n\nYou will be signed out. Please check your connection and try again.');
+    await handleLogout();
+  }
+}
+
+// ── Entry point ───────────────────────────────────────────────────────
+(async function(){
+  // Validate config
+  if(SUPABASE_URL.startsWith('REPLACE_') || SUPABASE_ANON_KEY.startsWith('REPLACE_')){
+    document.body.innerHTML = `<div style="padding:40px;font-family:system-ui;max-width:600px;margin:40px auto;background:#fff3cd;border:2px solid #ffc107;border-radius:8px;color:#000">
+      <h2 style="margin-top:0">Configuration required</h2>
+      <p>This dashboard is not yet configured. Please edit <code>index.html</code> and replace <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> with the values from your Supabase project settings.</p>
+      <p>See <code>DEPLOYMENT.md</code> for step-by-step instructions.</p>
+    </div>`;
+    return;
+  }
+
+  // Initialize client
+  _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Check existing session
+  const { data: { session } } = await _sb.auth.getSession();
+  if(session){
+    _currentUser = session.user;
+    await bootApp();
+  } else {
+    showLogin();
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
   }
 })();
 
