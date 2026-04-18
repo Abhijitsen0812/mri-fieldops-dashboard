@@ -3101,6 +3101,17 @@ async function loadAllFromDB(){
   INCIDENT_TICKETS = RAW_TICKETS.filter(isIncident);
   PM_CALLS = RAW_TICKETS.filter(isPM);
 
+  // Rebuild MONTHS from freshly-loaded tickets. Without this, MONTHS stays
+  // as the empty array computed at file-load time, which causes:
+  //   • countByMonth() → {} (all month-tab counts show 0)
+  //   • Dashboard/History month tabs render as just "All (N)" with nothing else
+  //   • scopeLabel shows "undefined – undefined"
+  //   • Any t.month match in filteredTickets() still works, but no way to pick a month
+  MONTHS = [...new Set(RAW_TICKETS.map(t=>t.month))]
+    .filter(Boolean)
+    .sort((a,b) => new Date('01 '+a) - new Date('01 '+b));
+  MONTH_SHORT = MONTHS.map(m => m.split(' ')[0].slice(0,3));
+
   // Recompute asset call counts
   CONFIG_ASSETS.forEach(a => {
     const calls = RAW_TICKETS.filter(t => t.asset_code === a.code);
@@ -3108,7 +3119,7 @@ async function loadAllFromDB(){
     a.open_calls = calls.filter(isOpen).length;
   });
 
-  console.log(`Loaded: ${RAW_TICKETS.length} tickets, ${CONFIG_ASSETS.length} assets, ${ENGINEERS.length} engineers, ${PM_SCHEDULE.length} PMs`);
+  console.log(`Loaded: ${RAW_TICKETS.length} tickets, ${CONFIG_ASSETS.length} assets, ${ENGINEERS.length} engineers, ${PM_SCHEDULE.length} PMs, months: [${MONTHS.join(', ')}]`);
 }
 
 // ── Write helpers ─────────────────────────────────────────────────────
