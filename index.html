@@ -299,6 +299,40 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     .content { padding: 12px; }
   }
 
+  /* ── Live (realtime) indicator ─────────────────────────────────────── */
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border-radius: 10px;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 10px; font-weight: 600; letter-spacing: .5px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border, rgba(255,255,255,.08));
+    color: var(--text-dim, #94a3b8);
+    user-select: none; transition: background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .live-badge__dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #94a3b8; box-shadow: 0 0 0 0 rgba(148,163,184,.5);
+  }
+  .live-badge[data-state="live"]     { color: #4ade80; border-color: rgba(74,222,128,.25); background: rgba(74,222,128,.06); }
+  .live-badge[data-state="live"] .live-badge__dot {
+    background: #4ade80;
+    animation: liveDotPulse 2.4s ease-out infinite;
+  }
+  .live-badge[data-state="offline"]  { color: #f87171; border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.08); }
+  .live-badge[data-state="offline"] .live-badge__dot { background: #f87171; animation: none; }
+  .live-badge[data-state="idle"]     { color: #94a3b8; }
+  .live-badge[data-state="idle"] .live-badge__dot { background: #94a3b8; animation: none; }
+  .live-badge--flash { background: rgba(74,222,128,.2) !important; }
+  @keyframes liveDotPulse {
+    0%   { box-shadow: 0 0 0 0   rgba(74,222,128,.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
+    100% { box-shadow: 0 0 0 0   rgba(74,222,128,0); }
+  }
+  @media (max-width: 768px) {
+    .live-badge__label { display: none; }  /* dot-only on phones to save space */
+    .live-badge { padding: 4px 6px; }
+  }
+
   /* ── Print / PDF export ────────────────────────────────────────────── */
   @media print {
     @page { size: A4 landscape; margin: 12mm; }
@@ -428,6 +462,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   <button class="btn btn-ghost admin-only" style="font-size:11px;padding:6px 12px" onclick="document.getElementById('xlsx-upload').click()" title="Upload service operations Excel file">📤 Upload XLSX</button>
   <button class="btn btn-ghost" id="reset-data-btn" style="font-size:11px;padding:6px 12px" onclick="resetToBundledData()" title="Refresh data from database">↻ Refresh</button>
   <div class="clock" id="clock">—</div>
+  <div id="live-badge" class="live-badge" data-state="idle" title="Connecting…">
+    <span class="live-badge__dot"></span><span class="live-badge__label">LIVE</span>
+  </div>
   <div id="user-menu" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim)">
     <span id="user-role-badge"></span>
     <span id="user-email" style="font-family:var(--mono)"></span>
@@ -3855,6 +3892,7 @@ async function handleLogout(){
   if(!_sb) return;
   // Log BEFORE signOut — after signOut the session is gone and RLS will reject insert.
   try { await logAudit('logout', {}); } catch(_){}
+  detachRealtime();
   await _sb.auth.signOut();
   location.reload();
 }
@@ -3869,6 +3907,9 @@ async function bootApp(){
     if(ue && _currentUser) ue.textContent = _currentUser.email || '';
     applyRoleRestrictions();
     await doFirstPaint();
+    // Subscribe to live DB changes so every user sees updates without a refresh.
+    // Cheap on the free tier (limit is 200 concurrent connections, 2M msgs/mo).
+    attachRealtime();
   } catch(e){
     hideLoading();
     console.error('Boot failed:', e);
@@ -3876,6 +3917,66 @@ async function bootApp(){
           '\n\nYou will be signed out. Please check your connection and try again.');
     await handleLogout();
   }
+}
+
+// ── Realtime (live sync across users) ─────────────────────────────────
+let _rtChannel = null;
+let _rtReloadTimer = null;
+function _scheduleRtReload(){
+  // Debounce: a batched upload can fire 300 events in a second. Collapse
+  // into one reload 400ms after the last event.
+  if(_rtReloadTimer) clearTimeout(_rtReloadTimer);
+  _rtReloadTimer = setTimeout(async () => {
+    _rtReloadTimer = null;
+    try {
+      await loadAllFromDB();
+      renderAll();
+      _flashLiveBadge();
+    } catch(e){
+      console.warn('[realtime] reload failed; will retry on next event', e);
+    }
+  }, 400);
+}
+function _flashLiveBadge(){
+  const el = document.getElementById('live-badge');
+  if(!el) return;
+  el.classList.add('live-badge--flash');
+  setTimeout(() => el.classList.remove('live-badge--flash'), 800);
+}
+function _setLiveBadgeState(state){
+  const el = document.getElementById('live-badge');
+  if(!el) return;
+  el.dataset.state = state; // 'live' | 'idle' | 'offline'
+  el.title = state === 'live' ? 'Live — changes sync instantly'
+          : state === 'offline' ? 'Offline — changes will not auto-sync'
+          : 'Connecting…';
+}
+function attachRealtime(){
+  if(!_sb || _rtChannel) return;
+  try {
+    _rtChannel = _sb.channel('fieldops-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' },      _scheduleRtReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pm_schedule' },  _scheduleRtReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'engineers' },    _scheduleRtReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cmc_contracts' },_scheduleRtReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ambiguities' },  _scheduleRtReload)
+      .subscribe((status) => {
+        // status values: SUBSCRIBED | CLOSED | CHANNEL_ERROR | TIMED_OUT
+        if(status === 'SUBSCRIBED') _setLiveBadgeState('live');
+        else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') _setLiveBadgeState('offline');
+        else _setLiveBadgeState('idle');
+      });
+  } catch(e){
+    console.warn('[realtime] attach failed', e);
+    _setLiveBadgeState('offline');
+  }
+}
+function detachRealtime(){
+  if(_rtChannel && _sb){
+    try { _sb.removeChannel(_rtChannel); } catch(_){}
+  }
+  _rtChannel = null;
+  if(_rtReloadTimer){ clearTimeout(_rtReloadTimer); _rtReloadTimer = null; }
 }
 
 // ── Entry point ───────────────────────────────────────────────────────
