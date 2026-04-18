@@ -196,6 +196,108 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   .viewer-mode .admin-only { display: none !important; }
   body:not(.superadmin-mode) .superadmin-only { display: none !important; }
   .viewer-badge { font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,.2); color: #c4b5fd; letter-spacing: 1px; }
+
+  /* ─────────────────────────────────────────────────────────────
+     RESPONSIVE — tablet (<=1024px) and mobile (<=768px)
+     Kept as pure add-ons; the desktop rules above are unchanged.
+     ───────────────────────────────────────────────────────────── */
+  img, video, canvas, svg { max-width: 100%; height: auto; }
+  .data-table { min-width: 100%; }
+
+  /* Hamburger button (hidden on desktop, shown on narrow screens) */
+  .hamburger {
+    display: none; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; width: 40px; height: 40px;
+    font-size: 18px; cursor: pointer; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .sidebar-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    z-index: 98; backdrop-filter: blur(2px);
+  }
+
+  /* Tablet and below */
+  @media (max-width: 1024px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .g-3-1, .g-1-1-1 { grid-template-columns: 1fr 1fr; }
+    .content { padding: 16px; }
+    .search-box { width: 100%; max-width: 240px; min-width: 0; }
+    #kpi-band { grid-template-columns: repeat(4, 1fr) !important; gap: 14px !important; }
+  }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    body { font-size: 13px; }
+
+    /* Sidebar becomes a drawer */
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      width: min(85vw, 280px);
+      box-shadow: 4px 0 20px rgba(0,0,0,.35);
+    }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    body.sidebar-open .sidebar-backdrop { display: block; }
+
+    /* Topbar reclaims the left margin; hamburger appears */
+    .topbar { left: 0; padding: 0 12px; gap: 10px; height: 56px; }
+    .hamburger { display: inline-flex; }
+    .main { margin-left: 0; padding-top: 56px; }
+    .content { padding: 14px; }
+
+    /* Hide low-value topbar chrome on phones to save space */
+    .clock, .static-dataset-label, #user-email { display: none; }
+    .topbar-title { font-size: 15px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #user-menu { gap: 6px; }
+
+    /* KPI + grids stack */
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .kpi-card { padding: 12px; }
+    .kpi-value { font-size: 24px; }
+    .g-3-1, .g-1-1, .g-1-1-1 { grid-template-columns: 1fr; }
+    #kpi-band { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+
+    /* Touch targets (>=44px on interactive controls) */
+    .btn { min-height: 40px; padding: 10px 14px; font-size: 13px; }
+    .nav-item { min-height: 44px; padding: 11px 10px; font-size: 14px; }
+    .tab { min-height: 34px; padding: 8px 14px; font-size: 12px; }
+    input, select, textarea { min-height: 40px; font-size: 16px; } /* 16px stops iOS auto-zoom */
+    .hamburger { min-height: 44px; min-width: 44px; }
+    .modal-close { padding: 10px 14px; font-size: 22px; }
+    .alert-close { padding: 10px; }
+
+    /* Tables keep fluid scroll, rows stay on one line */
+    .data-table { font-size: 11px; }
+    .data-table th, .data-table td { padding: 8px 10px; white-space: nowrap; }
+
+    /* Panels/cards */
+    .panel-head { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+    .panel-body { padding: 12px 14px; }
+    .panel-title { font-size: 13px; }
+
+    /* Modal full-width on mobile */
+    .modal { width: 100%; max-width: 100%; max-height: 95vh; border-radius: 10px; }
+    .modal-head, .modal-body { padding: 14px 16px; }
+    .detail-grid { grid-template-columns: 1fr; }
+
+    .alert-banner { flex-wrap: wrap; padding: 10px 12px; }
+
+    /* Horizontal-scroll filter tabs so they never break out */
+    .filter-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
+    .filter-tabs::-webkit-scrollbar { height: 3px; }
+
+    /* Sidebar footer stays pinned and fully visible (requirement 4.c) */
+    .sidebar { display: flex; flex-direction: column; }
+    .sidebar .nav { flex: 1 1 auto; }
+    .sidebar-footer { flex-shrink: 0; padding: 12px; }
+  }
+
+  /* Extra-small phones */
+  @media (max-width: 420px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    #kpi-band { grid-template-columns: 1fr 1fr !important; }
+    .content { padding: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -252,7 +354,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   </div>
 </aside>
 
+<div class="sidebar-backdrop" onclick="closeSidebar()" aria-hidden="true"></div>
+
 <header class="topbar">
+  <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-expanded="false">☰</button>
   <div class="topbar-title" id="topbar-title">Dashboard</div>
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
   <input type="file" id="xlsx-upload" accept=".xlsx" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
@@ -491,7 +596,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   <div class="grid-2 g-1-1">
     <div class="panel">
       <div class="panel-head"><div class="panel-title">📊 KPI Summary — Full Period</div></div>
-      <div class="panel-body"><div id="report-kpi-table"></div></div>
+      <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
     </div>
     <div class="panel">
       <div class="panel-head"><div class="panel-title">🔧 Parts & Component Failures</div></div>
@@ -1234,10 +1339,12 @@ function showUploadPreview(result, fileName){
 
     <div style="margin-bottom:14px">
       <div style="font-family:var(--mono);font-size:10px;color:var(--text-faint);letter-spacing:1px;margin-bottom:6px">SHEETS PARSED</div>
-      <table class="data-table" style="font-size:11px">
-        <thead><tr><th>SHEET</th><th style="text-align:center">TICKETS</th><th style="text-align:center">SKIPPED</th></tr></thead>
-        <tbody>${monthSummary}</tbody>
-      </table>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="font-size:11px">
+          <thead><tr><th>SHEET</th><th style="text-align:center">TICKETS</th><th style="text-align:center">SKIPPED</th></tr></thead>
+          <tbody>${monthSummary}</tbody>
+        </table>
+      </div>
     </div>
 
     ${result.config ? `<div style="margin-bottom:14px;padding:8px 12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:6px;font-size:11px;color:#6ee7b7">✓ Configuration sheet found — ${result.config.length} assets in install base</div>` : ''}
@@ -1775,7 +1882,31 @@ function navigate(page){
   logAudit('navigate', {page});
 }
 document.querySelectorAll('.nav-item[data-page]').forEach(item=>{
-  item.addEventListener('click',()=>navigate(item.dataset.page));
+  item.addEventListener('click',()=>{ navigate(item.dataset.page); closeSidebar(); });
+});
+
+// ── Responsive sidebar (mobile hamburger) ──────────────────────────
+function toggleSidebar(){
+  const body = document.body;
+  const open = !body.classList.contains('sidebar-open');
+  body.classList.toggle('sidebar-open', open);
+  const btn = document.getElementById('hamburger-btn');
+  if(btn){
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = open ? '✕' : '☰';
+  }
+}
+function closeSidebar(){
+  if(!document.body.classList.contains('sidebar-open')) return;
+  document.body.classList.remove('sidebar-open');
+  const btn = document.getElementById('hamburger-btn');
+  if(btn){ btn.setAttribute('aria-expanded','false'); btn.textContent = '☰'; }
+}
+// Close drawer on Escape
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeSidebar(); });
+// Auto-close if viewport grows past mobile breakpoint while drawer is open
+window.addEventListener('resize', () => {
+  if(window.innerWidth > 768) closeSidebar();
 });
 
 // ══════════════════════════════════════════
