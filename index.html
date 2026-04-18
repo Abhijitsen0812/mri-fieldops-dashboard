@@ -194,6 +194,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { color: var(--text-dim); font-size: 14px; }
   .viewer-mode .admin-only { display: none !important; }
+  body:not(.superadmin-mode) .superadmin-only { display: none !important; }
   .viewer-badge { font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,.2); color: #c4b5fd; letter-spacing: 1px; }
 </style>
 </head>
@@ -241,11 +242,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     <div class="nav-section">ANALYSIS</div>
     <div class="nav-item admin-only" data-page="ambiguities"><span class="nav-icon">⚠️</span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb">13</span></div>
     <div class="nav-item" data-page="reports"><span class="nav-icon">📈</span> Reports</div>
+    <div class="nav-item superadmin-only" data-page="auditlog"><span class="nav-icon">🛡️</span> Audit Log</div>
   </nav>
   <div class="sidebar-footer">
     <div class="user-card">
-      <div class="avatar">SM</div>
-      <div><div class="user-name">Service Manager</div><div class="user-role">OPS MANAGER</div></div>
+      <div class="avatar" id="sb-avatar">SM</div>
+      <div><div class="user-name" id="sb-user-name">—</div><div class="user-role" id="sb-user-role">—</div></div>
     </div>
   </div>
 </aside>
@@ -502,6 +504,40 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
       <table class="data-table">
         <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
         <tbody id="customer-freq-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ██ AUDIT LOG (superadmin-only) ██ -->
+<div class="page" id="page-auditlog">
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title" id="audit-panel-title">🛡️ Audit Log</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="audit-filter-action" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+          <option value="all">All actions</option>
+          <option value="login">Login</option>
+          <option value="logout">Logout</option>
+          <option value="login_failed">Login failed</option>
+          <option value="upload_failed">Upload failed</option>
+          <option value="upload_success">Upload success</option>
+          <option value="restricted_access_attempt">Restricted access</option>
+          <option value="navigate">Navigate</option>
+        </select>
+        <select id="audit-filter-user" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+          <option value="all">All users</option>
+        </select>
+        <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="reloadAuditLog()">↻ Refresh</button>
+      </div>
+    </div>
+    <div style="padding:10px 18px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border)" id="audit-summary">Loading…</div>
+    <div style="overflow-x:auto;max-height:70vh;overflow-y:auto">
+      <table class="data-table">
+        <thead><tr>
+          <th>WHEN</th><th>USER</th><th>ACTION</th><th>DETAILS</th>
+        </tr></thead>
+        <tbody id="audit-body"></tbody>
       </table>
     </div>
   </div>
@@ -1082,12 +1118,16 @@ function parseCMCSheet(rows, year){
 let _pendingUploadResult = null;
 
 async function handleXLSXUpload(event){
-  if(_userRole !== 'admin'){ alert('This action requires admin access.'); return; }
+  if(_userRole !== 'admin'){
+    logAudit('restricted_access_attempt', {target: 'xlsx_upload'});
+    alert('This action requires admin access.'); return;
+  }
   const file = event.target.files[0];
   if(!file) return;
   // Guard: file size limit (20 MB sanity bound)
   const MAX_SIZE = 20 * 1024 * 1024;
   if(file.size > MAX_SIZE){
+    logAudit('upload_failed', {file: file.name, reason: 'too_large', size_mb: +(file.size/1024/1024).toFixed(1)});
     alert(`File is too large (${(file.size/1024/1024).toFixed(1)} MB). The maximum supported size is ${MAX_SIZE/1024/1024} MB. Please check if you uploaded the right file.`);
     event.target.value = '';
     return;
@@ -1312,19 +1352,29 @@ async function applyUploadedData(){
     _pendingUploadResult = null;
     renderAll();
 
+    logAudit('upload_success', {tickets: RAW_TICKETS.length, months: MONTHS});
     alert(`Successfully saved ${RAW_TICKETS.length} tickets to the database. All team members will see the updated data on their next refresh.`);
 
   } catch(e){
     hideLoading();
     console.error('Upload save failed:', e);
+    logAudit('upload_failed', {reason: 'save_error', message: String(e.message||e).slice(0,200)});
     alert('Failed to save upload to database:\n\n' + (e.message || e) +
           '\n\nThe in-memory data has NOT been updated. Please check your connection and try again.');
     _pendingUploadResult = null;
   }
 }
 
+// Debounce the Refresh button so rapid clicks don't stack concurrent
+// loadAllFromDB() calls — each one fires 6-7 REST requests and would
+// amplify pressure on Supabase under concurrent-user load.
+let _refreshInFlight = false;
 async function resetToBundledData(){
+  if(_refreshInFlight) return;
   if(!confirm('Reload all data from the database? Any unsaved local changes will be discarded.')) return;
+  _refreshInFlight = true;
+  const btn = document.getElementById('reset-data-btn');
+  if(btn){ btn.disabled = true; btn.style.opacity = '0.5'; }
   try {
     showLoading('Refreshing from database…');
     await loadAllFromDB();
@@ -1333,6 +1383,9 @@ async function resetToBundledData(){
   } catch(e){
     hideLoading();
     alert('Refresh failed: ' + (e.message || e));
+  } finally {
+    _refreshInFlight = false;
+    if(btn){ btn.disabled = false; btn.style.opacity = ''; }
   }
 }
 
@@ -1697,10 +1750,19 @@ function normalisePart(raw){
 // ══════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════
-const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',reports:'Reports'};
+const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',reports:'Reports',auditlog:'Audit Log'};
+const SUPERADMIN_EMAIL = 'abhijit.s@3imedtech.com';
 function navigate(page){
   // Viewers cannot access the Flags & Ambiguities page
-  if(page==='ambiguities' && _userRole!=='admin'){ page='dashboard'; }
+  if(page==='ambiguities' && _userRole!=='admin'){
+    logAudit('restricted_access_attempt', {target: page});
+    page='dashboard';
+  }
+  // Only the designated superadmin email can open the Audit Log
+  if(page==='auditlog' && (_currentUser?.email||'').toLowerCase() !== SUPERADMIN_EMAIL){
+    logAudit('restricted_access_attempt', {target: page});
+    page='dashboard';
+  }
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const t=document.querySelector(`[data-page="${page}"]`);
   if(t) t.classList.add('active');
@@ -1708,6 +1770,9 @@ function navigate(page){
   document.getElementById(`page-${page}`)?.classList.add('active');
   document.getElementById('topbar-title').textContent=PAGE_TITLES[page]||page;
   if(page==='ambiguities') renderAmbiguities();
+  if(page==='auditlog') reloadAuditLog();
+  // Log navigation — fire-and-forget, don't block UI
+  logAudit('navigate', {page});
 }
 document.querySelectorAll('.nav-item[data-page]').forEach(item=>{
   item.addEventListener('click',()=>navigate(item.dataset.page));
@@ -2990,6 +3055,29 @@ let _sb = null;            // Supabase client
 let _currentUser = null;   // logged-in user
 let _userRole = 'viewer';  // 'admin' | 'viewer'
 
+// ───────────────────────────────────────────────────────────────
+// PROFILE DISPLAY — per-email name, title, and avatar initials
+// ───────────────────────────────────────────────────────────────
+function getProfileDisplay(email){
+  const e = (email||'').toLowerCase();
+  if(e === 'abhijit.s@3imedtech.com'){
+    return { name: 'Abhijit Sen', role: 'Service Ops Manager', avatar: 'AS' };
+  }
+  if(e === 'engineer@3imedtech.com'){
+    return { name: "Engineer's Profile", role: 'FIELD ENGINEER', avatar: 'EN' };
+  }
+  if(e === 'manager@3imedtech.com'){
+    return { name: "Manager's Profile", role: 'MANAGER', avatar: 'MG' };
+  }
+  // Fallback for any other logged-in user
+  const local = e.split('@')[0] || 'User';
+  return {
+    name: local.charAt(0).toUpperCase() + local.slice(1),
+    role: _userRole === 'admin' ? 'ADMIN' : 'VIEWER',
+    avatar: local.slice(0,2).toUpperCase()
+  };
+}
+
 function applyRoleRestrictions(){
   _userRole = _currentUser?.app_metadata?.role === 'admin' ? 'admin' : 'viewer';
   if(_userRole === 'viewer'){
@@ -2997,10 +3085,26 @@ function applyRoleRestrictions(){
   } else {
     document.body.classList.remove('viewer-mode');
   }
+  // Superadmin gate — specifically abhijit.s@, not all admins
+  const email = (_currentUser?.email || '').toLowerCase();
+  if(email === SUPERADMIN_EMAIL){
+    document.body.classList.add('superadmin-mode');
+  } else {
+    document.body.classList.remove('superadmin-mode');
+  }
   const badge = document.getElementById('user-role-badge');
   if(badge) badge.innerHTML = _userRole === 'viewer'
     ? '<span class="viewer-badge">VIEWER</span>'
     : '<span class="viewer-badge" style="background:rgba(59,130,246,.2);color:#93c5fd">ADMIN</span>';
+
+  // Paint the sidebar footer profile based on email
+  const prof = getProfileDisplay(_currentUser?.email);
+  const av = document.getElementById('sb-avatar');
+  const un = document.getElementById('sb-user-name');
+  const ur = document.getElementById('sb-user-role');
+  if(av) av.textContent = prof.avatar;
+  if(un) un.textContent = prof.name;
+  if(ur) ur.textContent = prof.role;
 }
 
 function showLogin(){ document.getElementById('login-overlay').style.display = 'flex'; }
@@ -3088,14 +3192,25 @@ async function loadAllFromDB(){
     _resolution: r.resolution || null,
   }));
 
-  // Tickets — paginate because Supabase caps at 1000 rows per request
+  // Tickets — paginate because Supabase caps at 1000 rows per request.
+  // Retry each page once on transient errors (5xx / network) to stay
+  // resilient under concurrent-user load without masking real failures.
   showLoading('Loading tickets…');
   const allTickets = [];
   let from = 0;
   const pageSize = 1000;
   while(true){
-    const { data: pg, error: e6 } = await _sb.from('tickets')
-      .select('*').order('id').range(from, from + pageSize - 1);
+    let pg = null, e6 = null;
+    for(let attempt = 0; attempt < 2; attempt++){
+      const res = await _sb.from('tickets').select('*').order('id').range(from, from + pageSize - 1);
+      pg = res.data; e6 = res.error;
+      if(!e6) break;
+      // Retry only on likely-transient errors (status 5xx or network).
+      const status = e6.status || e6.code || 0;
+      const transient = (typeof status === 'number' && status >= 500) || /network|timeout|fetch/i.test(e6.message||'');
+      if(!transient) break;
+      await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    }
     if(e6) throw e6;
     allTickets.push(...pg);
     if(pg.length < pageSize) break;
@@ -3218,6 +3333,98 @@ async function dbBulkUpsertTickets(tickets){
   }
 }
 
+// ── Audit log helpers ─────────────────────────────────────────────────
+// Fire-and-forget. Any RLS / insert failure is swallowed so audit never
+// blocks UI. RLS is configured so any authenticated user can INSERT
+// their own rows but only the superadmin can SELECT.
+let _auditRecentKey = '';
+async function logAudit(action, details){
+  try {
+    if(!_sb || !_currentUser) return;
+    // Debounce identical navigate events fired in rapid succession.
+    const key = action + '|' + JSON.stringify(details||{});
+    if(action === 'navigate' && key === _auditRecentKey) return;
+    _auditRecentKey = key;
+    await _sb.from('audit_log').insert({
+      user_email: _currentUser.email || null,
+      user_id: _currentUser.id || null,
+      action: action,
+      details: details || {},
+      user_agent: navigator.userAgent.slice(0, 200),
+    });
+  } catch(e){
+    // Silent — never interrupt UI over telemetry
+    console.debug('audit insert failed', e);
+  }
+}
+
+// Audit page state
+let _auditRows = [];
+async function reloadAuditLog(){
+  const body = document.getElementById('audit-body');
+  const summary = document.getElementById('audit-summary');
+  if(!body) return;
+  body.innerHTML = `<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-faint)">Loading…</td></tr>`;
+  try {
+    const { data, error } = await _sb.from('audit_log')
+      .select('*').order('created_at', {ascending: false}).limit(500);
+    if(error) throw error;
+    _auditRows = data || [];
+    // Populate user filter options
+    const users = [...new Set(_auditRows.map(r => r.user_email).filter(Boolean))].sort();
+    const userSel = document.getElementById('audit-filter-user');
+    if(userSel){
+      const prev = userSel.value;
+      userSel.innerHTML = '<option value="all">All users</option>' +
+        users.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+      if([...userSel.options].some(o => o.value === prev)) userSel.value = prev;
+    }
+    renderAuditLog();
+  } catch(e){
+    body.innerHTML = `<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--red)">Failed to load audit log: ${esc(e.message||e)}</td></tr>`;
+    if(summary) summary.textContent = '—';
+  }
+}
+
+function renderAuditLog(){
+  const body = document.getElementById('audit-body');
+  const summary = document.getElementById('audit-summary');
+  if(!body) return;
+  const actionF = (document.getElementById('audit-filter-action')||{}).value || 'all';
+  const userF   = (document.getElementById('audit-filter-user')||{}).value   || 'all';
+  const rows = _auditRows.filter(r => {
+    if(actionF !== 'all' && r.action !== actionF) return false;
+    if(userF !== 'all' && r.user_email !== userF) return false;
+    return true;
+  });
+  if(summary){
+    summary.textContent = `Showing ${rows.length} of ${_auditRows.length} most recent events (max 500)`;
+  }
+  if(rows.length === 0){
+    body.innerHTML = `<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-faint)">No events match the current filter.</td></tr>`;
+    return;
+  }
+  const actionColor = a => {
+    if(a === 'login') return 'var(--green)';
+    if(a === 'logout') return 'var(--text-dim)';
+    if(a === 'login_failed' || a === 'restricted_access_attempt' || a === 'upload_failed') return 'var(--red)';
+    if(a === 'upload_success') return 'var(--brand)';
+    return 'var(--text)';
+  };
+  body.innerHTML = rows.map(r => {
+    const when = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
+    const details = r.details && typeof r.details === 'object'
+      ? Object.entries(r.details).map(([k,v]) => `<span style="color:var(--text-dim)">${esc(k)}:</span> ${esc(typeof v==='string'?v:JSON.stringify(v))}`).join(' · ')
+      : esc(String(r.details||''));
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:11px;white-space:nowrap">${esc(when)}</td>
+      <td style="font-size:11px">${esc(r.user_email||'—')}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:${actionColor(r.action)}">${esc(r.action||'—')}</td>
+      <td style="font-size:11px;max-width:500px">${details || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ── Login handling ────────────────────────────────────────────────────
 async function handleLogin(ev){
   ev.preventDefault();
@@ -3231,10 +3438,17 @@ async function handleLogin(ev){
 
   try {
     const { data, error } = await _sb.auth.signInWithPassword({ email, password: pwd });
-    if(error) throw error;
+    if(error){
+      // Best-effort failure log. The anon role has no session yet, but RLS
+      // allows inserts for `authenticated` only — so we just skip the DB
+      // write for failed logins. Log to console for ops visibility.
+      console.warn('login_failed', {email, reason: error.message});
+      throw error;
+    }
     _currentUser = data.user;
     hideLogin();
     await bootApp();
+    logAudit('login', {method: 'password'});
   } catch(e){
     errBox.textContent = e.message || 'Sign in failed.';
     submitBtn.disabled = false;
@@ -3244,6 +3458,8 @@ async function handleLogin(ev){
 
 async function handleLogout(){
   if(!_sb) return;
+  // Log BEFORE signOut — after signOut the session is gone and RLS will reject insert.
+  try { await logAudit('logout', {}); } catch(_){}
   await _sb.auth.signOut();
   location.reload();
 }
