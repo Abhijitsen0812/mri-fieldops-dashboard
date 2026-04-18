@@ -298,6 +298,43 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     #kpi-band { grid-template-columns: 1fr 1fr !important; }
     .content { padding: 12px; }
   }
+
+  /* ── Print / PDF export ────────────────────────────────────────────── */
+  @media print {
+    @page { size: A4 landscape; margin: 12mm; }
+    html, body { background: #fff !important; color: #000 !important; }
+    /* Hide chrome */
+    .sidebar, .sidebar-backdrop, .topbar, .hamburger,
+    .export-btn, .export-btn-row,
+    .filter-tabs, .search-box,
+    #login-overlay, #loading-overlay, .modal-overlay,
+    .btn { display: none !important; }
+    /* Expand main */
+    .main { margin-left: 0 !important; padding-top: 0 !important; padding: 0 !important; }
+    .content { padding: 0 !important; max-width: 100% !important; }
+    /* Show only the active page */
+    .page { display: none !important; }
+    .page.active { display: block !important; page-break-inside: auto; }
+    /* Panel polish for paper */
+    .panel { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; }
+    .panel-head { background: #f0f0f0 !important; border-bottom: 1px solid #999 !important; color: #000 !important; }
+    .panel-title { color: #000 !important; }
+    .data-table { font-size: 9px !important; color: #000 !important; }
+    .data-table thead { background: #e6e6e6 !important; }
+    .data-table th, .data-table td { color: #000 !important; border-color: #bbb !important; white-space: normal !important; }
+    .data-table tr { break-inside: avoid; page-break-inside: avoid; }
+    /* Keep scroll wrappers from clipping */
+    [style*="overflow-x"] { overflow: visible !important; max-height: none !important; }
+    .clickable { cursor: default !important; }
+    /* Repeat table headers on each printed page */
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    /* Injected print header */
+    .print-header { display: block !important; margin: 0 0 8px 0; padding: 0 0 6px 0; border-bottom: 2px solid #000; }
+    .print-header h1 { font-size: 16px; margin: 0 0 2px 0; font-weight: 700; }
+    .print-header .meta { font-size: 10px; color: #333; }
+  }
+  .print-header { display: none; }
 </style>
 </head>
 <body>
@@ -399,6 +436,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 </header>
 
 <main class="main"><div class="content">
+<div class="print-header" id="print-header">
+  <h1 id="print-header-title">MRI FieldOps Dashboard</h1>
+  <div class="meta" id="print-header-meta">3i MEDTECH · Medical Imaging</div>
+</div>
 
 <!-- ██ DASHBOARD ██ -->
 <div class="page active" id="page-dashboard">
@@ -456,7 +497,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   <div class="panel">
     <div class="panel-head">
       <div class="panel-title" id="history-panel-title">📋 Full Service History</div>
-      <input class="search-box" placeholder="Search customer, issue, engineer, parts…" oninput="filterHistory(this.value)" id="history-search">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="search-box" placeholder="Search customer, issue, engineer, parts…" oninput="filterHistory(this.value)" id="history-search">
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:5px 10px" onclick="exportHistoryCSV()" title="Export filtered rows to CSV">⬇ CSV</button>
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:5px 10px" onclick="printCurrentPage('Service History')" title="Print / Save as PDF">🖨 PDF</button>
+      </div>
     </div>
     <div style="padding:12px 18px 0">
       <div class="filter-tabs" id="history-month-tabs"></div>
@@ -620,6 +665,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
 <!-- ██ REPORTS ██ -->
 <div class="page" id="page-reports">
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px" class="export-btn-row">
+    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="exportReportsCSV()" title="Export KPI + customer frequency to CSV">⬇ Export CSV</button>
+    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="printCurrentPage('Reports')" title="Print / Save as PDF">🖨 Print / PDF</button>
+  </div>
   <div class="grid-2 g-1-1">
     <div class="panel">
       <div class="panel-head"><div class="panel-title">📊 KPI Summary — Full Period</div></div>
@@ -2298,11 +2347,101 @@ function getTicketModality(t){
   return 'mri'; // default for unclassified
 }
 
-function renderHistory(){
+// ── Export helpers ────────────────────────────────────────────────────
+function _csvEscape(v){
+  if(v === null || v === undefined) return '';
+  const s = String(v);
+  // Prevent CSV/spreadsheet formula injection
+  const first = s.charAt(0);
+  const safe = (first === '=' || first === '+' || first === '-' || first === '@' || first === '\t' || first === '\r') ? "'" + s : s;
+  if(/[",\r\n]/.test(safe)) return '"' + safe.replace(/"/g, '""') + '"';
+  return safe;
+}
+function _downloadCSV(filename, headers, rows){
+  const lines = [headers.map(_csvEscape).join(',')];
+  for(const r of rows){ lines.push(r.map(_csvEscape).join(',')); }
+  // BOM so Excel opens UTF-8 correctly
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+}
+function _tsStamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function exportHistoryCSV(){
+  const rows = getFilteredHistoryRows();
+  const headers = ['TICKET ID','MONTH','CUSTOMER','MODEL','CALL TYPE','SYS STATUS','ISSUE','CALL DATE','ATTENDED','ENGINEER','PARTS','SYS UP','STATUS','RESOLUTION'];
+  const data = rows.map(t => [
+    t.id||'', t.month||'', t.customer||'', t.model||'',
+    t.call_type||'', t.sys_status||'', t.issue||'',
+    t.call_date||'', t.attended_date||'', t.engineer||'',
+    t.parts||'', t.sys_up_date||'', t.status||'', t.resolution||''
+  ]);
+  _downloadCSV(`service-history-${_tsStamp()}.csv`, headers, data);
+  try { logAudit('export_csv', {scope: 'service_history', rows: rows.length}); } catch(_){}
+}
+function exportReportsCSV(){
+  // 1) KPI summary from #report-kpi-table
+  const kpiTable = document.querySelector('#report-kpi-table table');
+  const kpiHeaders = kpiTable ? Array.from(kpiTable.querySelectorAll('thead th')).map(th => th.textContent.trim()) : [];
+  const kpiRows = kpiTable ? Array.from(kpiTable.querySelectorAll('tbody tr')).map(tr =>
+    Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+  ) : [];
+  // 2) Customer frequency
+  const custTable = document.querySelector('#customer-freq-body');
+  const custRows = custTable ? Array.from(custTable.querySelectorAll('tr')).map(tr =>
+    Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+  ) : [];
+  const custHeaders = ['CUSTOMER','TOTAL CALLS','INCIDENTS','PMS','OPEN','CONTRACT'];
+
+  // Merge into a single CSV with two sections
+  const sep = [];
+  const lines = [];
+  if(kpiHeaders.length){
+    lines.push('=== KPI SUMMARY ===');
+    lines.push(kpiHeaders.map(_csvEscape).join(','));
+    kpiRows.forEach(r => lines.push(r.map(_csvEscape).join(',')));
+    lines.push('');
+  }
+  if(custRows.length){
+    lines.push('=== CUSTOMER CALL FREQUENCY ===');
+    lines.push(custHeaders.map(_csvEscape).join(','));
+    custRows.forEach(r => lines.push(r.map(_csvEscape).join(',')));
+  }
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `reports-${_tsStamp()}.csv`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  try { logAudit('export_csv', {scope: 'reports', kpi_rows: kpiRows.length, customer_rows: custRows.length}); } catch(_){}
+}
+function printCurrentPage(label){
+  const titleEl = document.getElementById('print-header-title');
+  const metaEl  = document.getElementById('print-header-meta');
+  const who = (_currentUser && _currentUser.email) || '—';
+  const when = new Date().toLocaleString();
+  if(titleEl) titleEl.textContent = `MRI FieldOps — ${label || 'Report'}`;
+  if(metaEl)  metaEl.textContent  = `3i MEDTECH · Generated ${when} by ${who}`;
+  try { logAudit('print_pdf', {scope: label || 'page'}); } catch(_){}
+  // Let the header paint before the print dialog opens
+  setTimeout(() => window.print(), 50);
+}
+
+function getFilteredHistoryRows(){
   let rows=RAW_TICKETS;
   if(historyFilter!=='all') rows=rows.filter(t=>t.month===historyFilter);
   if(historySearch) rows=rows.filter(t=>[t.customer,t.issue,t.engineer,t.parts,t.resolution,t.model].some(v=>v&&v.toLowerCase().includes(historySearch.toLowerCase())));
   if(historyModalityFilter!=='all') rows=rows.filter(t=>getTicketModality(t)===historyModalityFilter);
+  return rows;
+}
+function renderHistory(){
+  const rows=getFilteredHistoryRows();
   document.getElementById('history-body').innerHTML=rows.map(t=>`
     <tr class="clickable" onclick="openDetail('${t.id}')">
       <td><span class="ticket-id">${t.id}</span></td>
