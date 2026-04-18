@@ -3923,6 +3923,28 @@ async function bootApp(){
     return;
   }
 
+  // Handle Supabase auth-error hashes (e.g. expired/invalid reset link).
+  // Example: #error=access_denied&error_code=otp_expired&error_description=...
+  if(window.location.hash && /[#&]error=/.test(window.location.hash)){
+    const p = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const code = (p.get('error_code') || p.get('error') || '').toLowerCase();
+    const desc = (p.get('error_description') || '').replace(/\+/g, ' ');
+    let msg = 'Your password reset link is invalid or has expired.';
+    if(code.includes('otp_expired')) msg = 'Your password reset link has expired. Please request a new one.';
+    else if(code.includes('access_denied')) msg = 'This reset link is no longer valid. Please request a new one.';
+    else if(desc) msg = desc;
+
+    // Clear the error fragment so a refresh doesn't re-trigger this flow
+    if(window.history && window.history.replaceState){
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    showLogin();
+    _showLoginForm('forgot-form');
+    const fm = document.getElementById('forgot-msg');
+    if(fm){ fm.style.color = '#ef4444'; fm.textContent = msg; }
+    return;
+  }
+
   // Check existing session
   const { data: { session } } = await _sb.auth.getSession();
   if(_recoveryMode){
