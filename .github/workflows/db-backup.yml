@@ -1,0 +1,113 @@
+name: Daily DB backup
+
+# Dumps the public schema of the Supabase Postgres database every day,
+# gzips it, encrypts it with AES-256-CBC (PBKDF2, 100k iterations), and
+# uploads the ciphertext as a GitHub Actions artifact with 30-day
+# retention. Plaintext is never written to disk; the backup is useless
+# to anyone who doesn't have BACKUP_ENCRYPTION_KEY.
+#
+# Restore: see scripts/RESTORE.md
+#
+# Required secrets:
+#   SUPABASE_DB_URL         postgres://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
+#                           (use the "Direct" connection string — NOT the
+#                           pooler — pg_dump needs session-mode access)
+#   BACKUP_ENCRYPTION_KEY   any strong passphrase; generate with:
+#                             openssl rand -hex 32
+
+on:
+  schedule:
+    # 02:00 UTC every day == 07:30 IST
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Install postgresql-client 16
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wget gnupg lsb-release ca-certificates
+          wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/pg-archive.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pg-archive.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          pg_dump --version
+
+      - name: Verify secrets are present
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "${DB_URL:-}" ]; then
+            echo "::error::Missing SUPABASE_DB_URL secret"; exit 1
+          fi
+          if [ -z "${ENC_KEY:-}" ]; then
+            echo "::error::Missing BACKUP_ENCRYPTION_KEY secret"; exit 1
+          fi
+          # Sanity: must be a postgres:// URL, must NOT be the pooler
+          case "$DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::SUPABASE_DB_URL must start with postgres:// or postgresql://"; exit 1 ;;
+          esac
+          if echo "$DB_URL" | grep -q "pooler.supabase.com"; then
+            echo "::warning::Using pooler URL — pg_dump may fail. Prefer Direct connection."
+          fi
+
+      - name: Dump, compress, encrypt
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          OUT="fieldops-backup-${STAMP}.sql.gz.enc"
+          # Stream directly: pg_dump → gzip → openssl. Plaintext never
+          # touches disk, which matters because GitHub artifacts on a
+          # public repo are downloadable by anyone with read access.
+          pg_dump \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            --schema=public \
+            --format=plain \
+            "$DB_URL" \
+            | gzip -9 \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt \
+                -pass env:ENC_KEY \
+                -out "$OUT"
+          ls -lh "$OUT"
+          # Quick sanity-check: verify we can re-read the header.
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+            -pass env:ENC_KEY -in "$OUT" 2>/dev/null \
+            | gunzip -c 2>/dev/null \
+            | head -c 80 \
+            | grep -q "PostgreSQL database dump" \
+            && echo "✅ Encrypted blob decrypts + unzips correctly." \
+            || (echo "::error::Self-verification failed — the artifact may be corrupt"; exit 1)
+          echo "ART=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ART }}
+          path: ${{ env.ART }}
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0   # already encrypted → zero-entropy, don't re-compress
+
+      - name: Summary
+        run: |
+          echo "### Backup complete ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact: \`${{ env.ART }}\` (30-day retention)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "See \`scripts/RESTORE.md\` for how to decrypt and restore." >> "$GITHUB_STEP_SUMMARY"

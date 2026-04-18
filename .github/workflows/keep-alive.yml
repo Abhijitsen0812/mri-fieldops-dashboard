@@ -1,0 +1,42 @@
+name: Supabase keep-alive
+
+# Supabase's free tier pauses a project after 7 consecutive days of no
+# activity. This workflow hits the REST API every 3 days with a cheap
+# read so the project is always seen as "active". Also hits the
+# recovery-password mailer queue? No — just a plain SELECT on engineers.
+
+on:
+  schedule:
+    # Every 3rd day at 04:17 UTC (odd minute to avoid the top-of-hour pile-up)
+    - cron: '17 4 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Missing SUPABASE_URL or SUPABASE_ANON_KEY secret"
+            exit 1
+          fi
+          # One very cheap read. The anon role can SELECT engineers under our
+          # existing RLS policy. Status 200 proves the project is awake.
+          HTTP_STATUS=$(curl -sS -o /tmp/body.json -w '%{http_code}' \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Accept-Profile: public" \
+            "${SUPABASE_URL}/rest/v1/engineers?select=id&limit=1")
+          echo "HTTP ${HTTP_STATUS}"
+          if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -ge 300 ]; then
+            echo "::error::Keep-alive ping failed with HTTP ${HTTP_STATUS}"
+            cat /tmp/body.json || true
+            exit 1
+          fi
+          echo "✅ Supabase project is awake."

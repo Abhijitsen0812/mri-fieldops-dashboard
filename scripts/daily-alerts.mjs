@@ -234,7 +234,7 @@ function renderEmail(slaRows, pmRows){
     ${renderPMTable(pmRows)}
     <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e5e5;font-size:11px;color:#888">
       Generated automatically by the FieldOps GitHub Actions cron (09:00 IST daily).<br>
-      Dashboard: <a href="https://3imedtech.github.io/mri-fieldops-dashboard/" style="color:#2c3e50">3imedtech.github.io/mri-fieldops-dashboard</a>
+      Dashboard: <a href="https://mri.3imedtech.com/" style="color:#2c3e50">mri.3imedtech.com</a>
     </div>
   </div>
 </body></html>`;
@@ -261,7 +261,7 @@ function renderEmail(slaRows, pmRows){
     });
   }
   lines.push('');
-  lines.push('Dashboard: https://3imedtech.github.io/mri-fieldops-dashboard/');
+  lines.push('Dashboard: https://mri.3imedtech.com/');
   const text = lines.join('\n');
 
   return { subject, html, text };
