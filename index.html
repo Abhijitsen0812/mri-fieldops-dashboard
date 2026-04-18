@@ -239,7 +239,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     <div class="nav-item" data-page="assets"><span class="nav-icon">🏥</span> Install Base</div>
     <div class="nav-item" data-page="team"><span class="nav-icon">👷</span> Field Team <span class="nav-badge green" id="nb-team">9</span></div>
     <div class="nav-section">ANALYSIS</div>
-    <div class="nav-item" data-page="ambiguities"><span class="nav-icon">⚠️</span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb">13</span></div>
+    <div class="nav-item admin-only" data-page="ambiguities"><span class="nav-icon">⚠️</span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb">13</span></div>
     <div class="nav-item" data-page="reports"><span class="nav-icon">📈</span> Reports</div>
   </nav>
   <div class="sidebar-footer">
@@ -445,10 +445,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     <div class="panel" style="margin-bottom:0">
       <div class="panel-head">
         <div class="panel-title">👷 Engineers — Master List</div>
-        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px" onclick="toggleAddEngineerForm()">+ Add</button>
-        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;margin-left:6px" onclick="resetRoster()" title="Reset roster to original list">↺ Reset</button>
+        <button class="btn btn-ghost admin-only" style="font-size:10px;padding:4px 10px" onclick="toggleAddEngineerForm()">+ Add</button>
+        <button class="btn btn-ghost admin-only" style="font-size:10px;padding:4px 10px;margin-left:6px" onclick="resetRoster()" title="Reset roster to original list">↺ Reset</button>
       </div>
-      <div id="add-eng-form" style="display:none;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+      <div id="add-eng-form" class="admin-only" style="display:none;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
         <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:10px">ADD ENGINEER</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <input class="search-box" id="new-eng-name" placeholder="Full name (e.g. Rajesh Kumar)" style="padding:6px 10px">
@@ -1250,7 +1250,11 @@ async function applyUploadedData(){
         coldhead: a.coldhead || null,
         alias_of: a._alias_of || null,
       }));
-      const { error } = await _sb.from('config_assets').upsert(configRows);
+      // Dedupe by primary key 'code' — PG ON CONFLICT can't handle duplicate keys
+      const cfgSeen = new Map();
+      configRows.forEach(row => { if(row.code) cfgSeen.set(row.code, row); });
+      const deduped = Array.from(cfgSeen.values());
+      const { error } = await _sb.from('config_assets').upsert(deduped);
       if(error) throw error;
     }
 
@@ -1689,6 +1693,8 @@ function normalisePart(raw){
 // ══════════════════════════════════════════
 const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',reports:'Reports'};
 function navigate(page){
+  // Viewers cannot access the Flags & Ambiguities page
+  if(page==='ambiguities' && _userRole!=='admin'){ page='dashboard'; }
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const t=document.querySelector(`[data-page="${page}"]`);
   if(t) t.classList.add('active');
@@ -1816,8 +1822,8 @@ function renderAlertBanner(){
   c.innerHTML=`<div class="alert-banner">
     <span style="font-size:18px">⚠️</span>
     <div style="flex:1">
-      <div style="font-weight:600;font-size:13px;color:#fcd34d">${openCount} Open Ticket${openCount!==1?'s':''} · ${flagCount} Audit Flag${flagCount!==1?'s':''}${dateNote}</div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Review <span style="color:var(--amber);cursor:pointer" onclick="navigate('ambiguities')">Flags &amp; Ambiguities →</span></div>
+      <div style="font-weight:600;font-size:13px;color:#fcd34d">${openCount} Open Ticket${openCount!==1?'s':''}<span class="admin-only"> · ${flagCount} Audit Flag${flagCount!==1?'s':''}</span>${dateNote}</div>
+      <div class="admin-only" style="font-size:11px;color:var(--text-dim);margin-top:2px">Review <span style="color:var(--amber);cursor:pointer" onclick="navigate('ambiguities')">Flags &amp; Ambiguities →</span></div>
     </div>
     <div class="alert-close" onclick="this.parentElement.parentElement.style.display='none'">×</div>
   </div>`;
@@ -1874,7 +1880,7 @@ function renderKPIGrid(){
     <div class="kpi-card red"><div class="kpi-label">Incidents</div><div class="kpi-value red">${scopeIncidents.length}</div><div class="kpi-delta down">${scope.length?Math.round(scopeIncidents.length/scope.length*100):0}% of scope</div></div>
     <div class="kpi-card green"><div class="kpi-label">PM Calls</div><div class="kpi-value green">${scopePM.length}</div><div class="kpi-delta up">${esc(scopeLabel)}</div></div>
     <div class="kpi-card amber"><div class="kpi-label">Open Tickets${isFiltered?'':''}</div><div class="kpi-value amber">${scopeOpen.length}</div><div class="kpi-delta warn">${isFiltered?'Opened in '+dashMonthFilter:'Require action now'}</div></div>
-    <div class="kpi-card purple" title="Data flags apply to the entire dataset regardless of filter"><div class="kpi-label">Data Flags ${lockTag}</div><div class="kpi-value purple">${AMBIGUITIES.length}</div><div class="kpi-delta warn">Need your review</div></div>
+    <div class="kpi-card purple admin-only" title="Data flags apply to the entire dataset regardless of filter"><div class="kpi-label">Data Flags ${lockTag}</div><div class="kpi-value purple">${AMBIGUITIES.length}</div><div class="kpi-delta warn">Need your review</div></div>
     <div class="kpi-card cyan" title="Assets don't change by month"><div class="kpi-label">Assets Covered ${lockTag}</div><div class="kpi-value cyan">${CONFIG_ASSETS.length}</div><div class="kpi-delta">Across ${new Set(CONFIG_ASSETS.map(a=>a.town)).size} cities</div></div>
     <div class="kpi-card green" title="${slaTooltip}" style="cursor:help">
       <div class="kpi-label">SLA Compliance <span style="font-size:11px;vertical-align:middle">ⓘ</span></div>
@@ -2426,7 +2432,7 @@ function renderAssets(search=''){
   // Unmatched row
   if(unmatchedTickets.length>0){
     const tbody=document.getElementById('asset-body');
-    tbody.innerHTML+=`<tr style="background:rgba(245,158,11,.06)">
+    tbody.innerHTML+=`<tr class="admin-only" style="background:rgba(245,158,11,.06)">
       <td colspan="16" style="color:var(--amber);font-family:var(--mono);font-size:11px;padding:10px 12px">
         ⚠ ${unmatchedTickets.length} ticket${unmatchedTickets.length>1?'s':''} could not be matched to a known asset — review Flags &amp; Ambiguities
       </td>
@@ -2482,7 +2488,7 @@ function renderTeam(){
         <div style="font-family:var(--mono);font-size:8px;color:var(--text-faint);letter-spacing:.5px">CALLS</div>
       </div>
       <div class="eng-status-pill ${status==='Assigned'?'amber':'available'}" style="margin-right:8px">${status}</div>
-      <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;color:var(--text-faint)" onclick="removeEngineer('${esc(e.id)}')" title="Remove from roster">×</button>
+      <button class="btn btn-ghost admin-only" style="font-size:11px;padding:2px 8px;color:var(--text-faint)" onclick="removeEngineer('${esc(e.id)}')" title="Remove from roster">×</button>
     </div>`;
   }).join('');
   const footnote = `<div style="font-family:var(--mono);font-size:9px;color:var(--text-faint);padding:8px 4px;text-align:center">${ENGINEERS.length} engineer${ENGINEERS.length!==1?'s':''} on roster · showing calls for: ${esc(monthLabel)}</div>`;
@@ -2521,6 +2527,7 @@ function toggleAddEngineerForm(){
 }
 
 async function addEngineer(){
+  if(_userRole !== 'admin'){ alert('This action requires admin access.'); return; }
   const name = document.getElementById('new-eng-name').value.trim();
   const region = document.getElementById('new-eng-region').value.trim();
   const email = document.getElementById('new-eng-email').value.trim();
@@ -2553,6 +2560,7 @@ async function addEngineer(){
 }
 
 async function removeEngineer(id){
+  if(_userRole !== 'admin'){ alert('This action requires admin access.'); return; }
   const eng = ENGINEERS.find(e=>e.id===id);
   if(!eng) return;
   if(!confirm(`Remove "${eng.name}" from the roster? This does not delete any tickets — only the roster entry.`)) return;
@@ -2565,6 +2573,7 @@ async function removeEngineer(id){
 }
 
 async function resetRoster(){
+  if(_userRole !== 'admin'){ alert('This action requires admin access.'); return; }
   if(!confirm('Reset the engineer roster to the original default list? Any added engineers will be removed from the database.')) return;
   // Delete extras from DB, then re-insert defaults
   const defaultIds = new Set(ENGINEERS_DEFAULT.map(e => e.id));
@@ -2777,7 +2786,7 @@ function renderReports(){
         <tr><td>MTTR (Mean Time to Restore)</td><td style="font-family:var(--mono);color:var(--accent)">${mttrDisplay}</td><td style="font-size:11px">call_date to sys_up_date, closed Incidents only</td></tr>
         <tr><td>Repeat Failure Customers</td><td style="font-family:var(--mono);color:var(--amber)">${repeatResult.customerCount}</td><td style="font-size:11px">${repeatResult.ticketsInvolved} tickets involved, 45-day window</td></tr>
         <tr><td>Calls Involving Parts</td><td style="font-family:var(--mono);color:var(--purple)">${withParts}</td><td style="font-size:11px">${Math.round(withParts/RAW_TICKETS.length*100)}% of calls</td></tr>
-        <tr><td>Data Flags</td><td style="font-family:var(--mono);color:var(--amber)">${AMBIGUITIES.length}</td><td style="font-size:11px">Need review</td></tr>
+        <tr class="admin-only"><td>Data Flags</td><td style="font-family:var(--mono);color:var(--amber)">${AMBIGUITIES.length}</td><td style="font-size:11px">Need review</td></tr>
         <tr style="border-top:1px solid var(--border)"><td colspan="3" style="font-family:var(--mono);font-size:9px;color:var(--text-faint);padding-top:10px">MODALITY BREAKDOWN</td></tr>
         <tr><td>MRI Calls</td><td style="font-family:var(--mono);color:var(--brand)">${mriTickets.length}</td><td style="font-size:11px">${Math.round(mriTickets.length/RAW_TICKETS.length*100)}% of total</td></tr>
         <tr><td>PET-CT Calls</td><td style="font-family:var(--mono);color:var(--purple)">${petCtTickets.length}</td><td style="font-size:11px">${Math.round(petCtTickets.length/RAW_TICKETS.length*100)}% of total</td></tr>
@@ -3136,7 +3145,7 @@ async function dbSaveAmbiguity(a){
 }
 async function dbBulkUpsertTickets(tickets){
   // Convert each ticket to DB shape, then upsert in batches of 500
-  const rows = tickets.map(t => ({
+  const rawRows = tickets.map(t => ({
     id: t.id, month: t.month, src_row: t.src_row,
     customer_raw: t.customer_raw, customer: t.customer,
     asset_code: t.asset_code && t.asset_code !== '⚠UNMATCHED' ? t.asset_code : null,
@@ -3153,6 +3162,13 @@ async function dbBulkUpsertTickets(tickets){
     orphaned: !!t.orphaned, unmatched: !!t.unmatched,
     ambiguities: t.ambiguities || [],
   }));
+  // Dedupe by id — Postgres ON CONFLICT cannot process the same key twice
+  // in a single statement. Later occurrence wins (matches "last write wins").
+  const seen = new Map();
+  rawRows.forEach(r => { if(r.id) seen.set(r.id, r); });
+  const rows = Array.from(seen.values());
+  const dupesRemoved = rawRows.length - rows.length;
+  if(dupesRemoved > 0) console.warn(`Dedupe: removed ${dupesRemoved} duplicate ticket id(s) before upsert`);
   const batchSize = 500;
   for(let i=0; i<rows.length; i+=batchSize){
     const batch = rows.slice(i, i+batchSize);
