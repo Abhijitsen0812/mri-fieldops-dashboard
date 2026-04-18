@@ -1,0 +1,16 @@
+{
+  "name": "fieldops-alerts",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Daily SLA + PM overdue digest for the MRI FieldOps dashboard",
+  "scripts": {
+    "alerts": "node daily-alerts.mjs"
+  },
+  "dependencies": {
+    "nodemailer": "^8.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

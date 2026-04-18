@@ -1,0 +1,47 @@
+name: Daily SLA + PM alerts
+
+on:
+  schedule:
+    # 03:30 UTC == 09:00 IST every day
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+    # Allow manual runs from the Actions tab for testing
+    inputs:
+      dry_run:
+        description: "Dry run (print digest to logs, do not send email)"
+        required: false
+        default: "false"
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci || npm install
+
+      - name: Run daily alerts
+        working-directory: scripts
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ZOHO_SMTP_HOST:            ${{ secrets.ZOHO_SMTP_HOST }}
+          ZOHO_SMTP_PORT:            ${{ secrets.ZOHO_SMTP_PORT }}
+          ZOHO_SMTP_USER:            ${{ secrets.ZOHO_SMTP_USER }}
+          ZOHO_SMTP_PASS:            ${{ secrets.ZOHO_SMTP_PASS }}
+          ALERT_FROM:                ${{ secrets.ALERT_FROM }}
+          ALERT_TO:                  ${{ secrets.ALERT_TO }}
+          SLA_BREACH_DAYS:           "3"
+          DRY_RUN:                   ${{ github.event.inputs.dry_run }}
+        run: node daily-alerts.mjs
