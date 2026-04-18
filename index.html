@@ -321,7 +321,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 <div class="page" id="page-tickets">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title">📋 Full Service History — 143 Records (Oct 2025 – Mar 2026)</div>
+      <div class="panel-title" id="history-panel-title">📋 Full Service History</div>
       <input class="search-box" placeholder="Search customer, issue, engineer, parts…" oninput="filterHistory(this.value)" id="history-search">
     </div>
     <div style="padding:12px 18px 0">
@@ -1368,6 +1368,11 @@ function renderAll(){
   if(tn) tn.textContent = RAW_TICKETS.length;
   const an = document.getElementById('nb-amb');
   if(an) an.textContent = AMBIGUITIES.length;
+  const hpt = document.getElementById('history-panel-title');
+  if(hpt){
+    const range = MONTHS.length ? ` (${MONTHS[0]} – ${MONTHS[MONTHS.length-1]})` : '';
+    hpt.textContent = `📋 Full Service History — ${RAW_TICKETS.length} Record${RAW_TICKETS.length!==1?'s':''}${range}`;
+  }
 }
 
 // Note: dataset auto-load from localStorage was removed when this dashboard
@@ -2944,7 +2949,8 @@ async function doFirstPaint(){
   renderAmbiguities();
   renderReports();
 
-  // Sync dynamic nav badges
+  // Sync dynamic nav badges (all of them — this ran only in renderAll() before,
+  // so after a fresh login these badges kept the hardcoded HTML values).
   const tb = document.getElementById('nb-team');
   if(tb) tb.textContent = ENGINEERS.length;
   const pb = document.getElementById('nb-pm');
@@ -2952,6 +2958,25 @@ async function doFirstPaint(){
     const urgent = PM_SCHEDULE.filter(pm => {const s=pmStatus(pm); return s.code==='overdue'||s.code==='in-window';}).length;
     pb.textContent = urgent;
     pb.className = 'nav-badge ' + (urgent > 0 ? '' : 'green');
+  }
+  const obn = document.getElementById('nb-open');
+  if(obn) obn.textContent = OPEN_TICKETS.length;
+  const tn = document.getElementById('nb-total');
+  if(tn) tn.textContent = RAW_TICKETS.length;
+  const an = document.getElementById('nb-amb');
+  if(an) an.textContent = AMBIGUITIES.length;
+
+  // Sync dynamic panel titles that previously carried hardcoded counts.
+  const hpt = document.getElementById('history-panel-title');
+  if(hpt){
+    const range = MONTHS.length ? ` (${MONTHS[0]} – ${MONTHS[MONTHS.length-1]})` : '';
+    hpt.textContent = `📋 Full Service History — ${RAW_TICKETS.length} Record${RAW_TICKETS.length!==1?'s':''}${range}`;
+  }
+
+  // Sync dataset label in the top bar too.
+  const dl = document.getElementById('dataset-label');
+  if(dl && MONTHS.length){
+    dl.textContent = `DATASET · ${MONTHS[0]} – ${MONTHS[MONTHS.length-1]}`;
   }
 }
 
