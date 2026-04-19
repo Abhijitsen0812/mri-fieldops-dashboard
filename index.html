@@ -543,6 +543,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 <header class="topbar">
   <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-expanded="false">☰</button>
   <div class="topbar-title" id="topbar-title">Dashboard</div>
+  <div id="env-pill" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;background:#f59e0b;color:#000;box-shadow:0 0 0 1px #b45309 inset" title="You are on the STAGING environment. Data here is isolated from production.">STAGING</div>
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
   <input type="file" id="xlsx-upload" accept=".xlsx" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
   <button class="btn btn-ghost admin-only" style="font-size:11px;padding:6px 12px" onclick="document.getElementById('xlsx-upload').click()" title="Upload service operations Excel file">📤 Upload XLSX</button>
@@ -3682,10 +3683,42 @@ async function doFirstPaint(){
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// SUPABASE INTEGRATION
+// SUPABASE INTEGRATION — prod + staging environments
 // ══════════════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://mvwhubatooliudbvythy.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12d2h1YmF0b29saXVkYnZ5dGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzY1MDIsImV4cCI6MjA5MTkxMjUwMn0.o0GLOnq99a78kE3z3dQt8LmFXTgg7B7f3H9-MglqErw';
+// Env detection: staging is active when
+//   (a) the page is served from a /staging/ subpath (GitHub Actions deploy), OR
+//   (b) the URL carries ?env=staging (override for quick testing from prod URL)
+// Otherwise we run against prod. Anon keys are public by design — safe to ship
+// both in the client bundle. Service-role keys NEVER belong here.
+const IS_STAGING = (typeof location !== 'undefined') && (
+  location.pathname.toLowerCase().includes('/staging/')
+  || new URLSearchParams(location.search).get('env') === 'staging'
+);
+
+const SUPABASE_ENVS = {
+  prod: {
+    url: 'https://mvwhubatooliudbvythy.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12d2h1YmF0b29saXVkYnZ5dGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMzY1MDIsImV4cCI6MjA5MTkxMjUwMn0.o0GLOnq99a78kE3z3dQt8LmFXTgg7B7f3H9-MglqErw'
+  },
+  staging: {
+    url: 'https://qupkpprptopyejbnslev.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1cGtwcHJwdG9weWVqYm5zbGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMDQ5NTIsImV4cCI6MjA4ODc4MDk1Mn0.4q-0OveAqms2-4YDCk-2SEFj8S3w4az5Gs-OtNU-KcQ'
+  }
+};
+
+const ENV_NAME = IS_STAGING ? 'staging' : 'prod';
+const SUPABASE_URL      = SUPABASE_ENVS[ENV_NAME].url;
+const SUPABASE_ANON_KEY = SUPABASE_ENVS[ENV_NAME].anonKey;
+
+// Flip the tab title so the wrong tab can't be confused for prod.
+if(IS_STAGING && typeof document !== 'undefined'){
+  try { document.title = '[STAGING] ' + document.title; } catch(_){}
+  // Reveal the STAGING pill in the top-bar as soon as the DOM is parsed.
+  document.addEventListener('DOMContentLoaded', () => {
+    const pill = document.getElementById('env-pill');
+    if(pill) pill.style.display = 'inline-block';
+  });
+}
 
 let _sb = null;            // Supabase client
 let _currentUser = null;   // logged-in user

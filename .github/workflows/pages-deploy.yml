@@ -1,0 +1,88 @@
+name: Deploy Pages (main + staging)
+
+# Builds the published Pages site from two branches:
+#   - `main`     → site root               (/)
+#   - `staging`  → subpath                 (/staging/)
+#
+# Both live at the same Pages URL:
+#   https://3imedtech.github.io/mri-fieldops-dashboard/            (prod)
+#   https://3imedtech.github.io/mri-fieldops-dashboard/staging/    (staging)
+#
+# The index.html shared by both branches auto-detects the environment from
+# the URL path (and falls back to ?env=staging) and selects the matching
+# Supabase project. No secrets are embedded — only the public anon keys.
+#
+# Triggers: any push to main or staging, or manual run from the Actions tab.
+# GitHub Pages "Source" must be set to "GitHub Actions" in repo Settings → Pages.
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main (prod)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: prod
+
+      - name: Checkout staging (if branch exists)
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: staging
+          path: staging-src
+
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          # Copy prod content to the root, excluding VCS + workflow internals.
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.claude' \
+                   --exclude='scripts' \
+                   prod/ site/
+          # Copy staging content into /staging/ if the branch was checked out.
+          if [ -d staging-src ] && [ -f staging-src/index.html ]; then
+            mkdir -p site/staging
+            rsync -a --exclude='.git' --exclude='.github' --exclude='.claude' \
+                     --exclude='scripts' \
+                     staging-src/ site/staging/
+            echo "✅ staging/ published"
+          else
+            echo "ℹ︎  staging branch missing or empty — skipping /staging/ publish"
+          fi
+          # Disable Jekyll so files starting with _ aren't dropped.
+          touch site/.nojekyll
+          echo "Site tree:"; find site -maxdepth 2 -type f | head -40
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
