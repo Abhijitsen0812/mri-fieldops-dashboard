@@ -39,7 +39,11 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+          # Ubuntu's /usr/bin/pg_dump wrapper defaults to the oldest installed
+          # cluster version. Put the v17 binary directory first on PATH so
+          # `pg_dump` resolves to the right major version.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Verify secrets are present
         env:
