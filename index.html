@@ -4120,9 +4120,21 @@ function _rollupRtState(){
   else if(allSettled)    _setLiveBadgeState('offline');
   else                   _setLiveBadgeState('idle');
 }
-function attachRealtime(){
+async function attachRealtime(){
   if(!_sb || _rtChannels.length) return;
   try {
+    // CRITICAL: the Realtime WebSocket doesn't automatically inherit
+    // the authenticated user's JWT from supabase.auth. Without this,
+    // the socket runs as `anon`, RLS silently blocks the postgres_changes
+    // subscription check, and every table times out. Refresh the token
+    // on every attach (cheap) and re-push on token refresh below.
+    try {
+      const { data: { session } } = await _sb.auth.getSession();
+      if(session && session.access_token){
+        _sb.realtime.setAuth(session.access_token);
+      }
+    } catch(e){ console.warn('[realtime] could not fetch session for setAuth', e); }
+
     _RT_TABLES.forEach(table => {
       const entry = { table, channel: null, status: 'idle' };
       const ch = _sb.channel('fieldops-live-' + table)
@@ -4186,6 +4198,13 @@ function detachRealtime(){
       _recoveryMode = true;
       showLogin();
       _showLoginForm('recovery-form');
+    }
+    // Keep the Realtime WebSocket auth in sync with the Auth client.
+    // SIGNED_IN fires after login; TOKEN_REFRESHED fires ~every hour.
+    // Without this, the socket keeps using the old token and RLS starts
+    // blocking subscription renewals, which looks like a random disconnect.
+    if((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && session.access_token){
+      try { _sb.realtime.setAuth(session.access_token); } catch(_){}
     }
   });
 
