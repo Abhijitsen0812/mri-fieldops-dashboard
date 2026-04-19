@@ -1544,6 +1544,12 @@ async function applyUploadedData(){
   showLoading(`Saving ${r.allTickets.length} tickets to database…`);
 
   try {
+    // Uploads can fire hundreds of realtime events. Tell our own session
+    // to ignore them for the next 30s — RAW_TICKETS is already being set
+    // below, and re-fetching would just hide the UI behind a background
+    // loader we don't need.
+    suppressRealtimeReload(30000);
+
     // 1. Write config assets (if any new ones appeared)
     if(r.config && r.config.length > 0){
       const configRows = r.config.map(a => ({
@@ -3162,6 +3168,7 @@ async function saveAmbReview(ambId, data){
   a._resolution = data.decision + ' — ' + data.notes;
   // Push to Supabase (wrap dbSaveAmbiguity with review payload)
   try {
+    suppressRealtimeReload(3000);
     const { error } = await _sb.from('ambiguities').update({
       review: data,
       resolution: a._resolution,
@@ -3303,6 +3310,7 @@ async function undoReview(ambId){
   const a = AMBIGUITIES.find(x => x.id === ambId);
   if(!a) return;
   try {
+    suppressRealtimeReload(3000);
     const { error } = await _sb.from('ambiguities').update({
       review: null, resolution: null, resolved_at: null, resolved_by: null,
     }).eq('id', ambId);
@@ -3628,8 +3636,14 @@ function displayToDbDate(d){
   return parsed.toISOString().slice(0,10);
 }
 
-async function loadAllFromDB(){
-  showLoading('Loading engineers…');
+async function loadAllFromDB(opts = {}){
+  // `silent: true` skips the full-screen blocking loader. Used by the
+  // realtime listener so a background refetch after another user's
+  // write doesn't hijack the UI of everyone currently working.
+  const silent = !!opts.silent;
+  const setMsg = (m) => { if(!silent) showLoading(m); };
+
+  setMsg('Loading engineers…');
   const { data: engs, error: e1 } = await _sb.from('engineers').select('*').order('id');
   if(e1) throw e1;
   ENGINEERS = engs.map(r => ({
@@ -3637,7 +3651,7 @@ async function loadAllFromDB(){
     aliases: r.aliases || [],
   }));
 
-  showLoading('Loading install base…');
+  setMsg('Loading install base…');
   const { data: assets, error: e2 } = await _sb.from('config_assets').select('*');
   if(e2) throw e2;
   CONFIG_ASSETS = assets.map(r => ({
@@ -3648,7 +3662,7 @@ async function loadAllFromDB(){
     open_calls: 0, total_calls: 0, // recomputed below
   }));
 
-  showLoading('Loading CMC contracts…');
+  setMsg('Loading CMC contracts…');
   const { data: cmcs, error: e3 } = await _sb.from('cmc_contracts').select('*').order('sn');
   if(e3) throw e3;
   CMC_DATA = cmcs.map(r => ({
@@ -3656,7 +3670,7 @@ async function loadAllFromDB(){
     start: dbDateToDisplay(r.start_date), end: dbDateToDisplay(r.end_date),
   }));
 
-  showLoading('Loading PM schedule…');
+  setMsg('Loading PM schedule…');
   const { data: pms, error: e4 } = await _sb.from('pm_schedule').select('*');
   if(e4) throw e4;
   PM_SCHEDULE = pms.map(r => ({
@@ -3669,7 +3683,7 @@ async function loadAllFromDB(){
     status: r.status || 'active',
   }));
 
-  showLoading('Loading ambiguities…');
+  setMsg('Loading ambiguities…');
   const { data: ambs, error: e5 } = await _sb.from('ambiguities').select('*');
   if(e5) throw e5;
   AMBIGUITIES = ambs.map(r => ({
@@ -3684,7 +3698,7 @@ async function loadAllFromDB(){
   // Tickets — paginate because Supabase caps at 1000 rows per request.
   // Retry each page once on transient errors (5xx / network) to stay
   // resilient under concurrent-user load without masking real failures.
-  showLoading('Loading tickets…');
+  setMsg('Loading tickets…');
   const allTickets = [];
   let from = 0;
   const pageSize = 1000;
@@ -3754,10 +3768,12 @@ async function loadAllFromDB(){
 // ── Write helpers ─────────────────────────────────────────────────────
 async function dbSaveEngineer(e){
   const row = {id: e.id, name: e.name, region: e.region, email: e.email || null, aliases: e.aliases || []};
+  suppressRealtimeReload(3000);
   const { error } = await _sb.from('engineers').upsert(row);
   if(error){ console.error('Save engineer failed:', error); alert('Save failed: ' + error.message); }
 }
 async function dbDeleteEngineer(id){
+  suppressRealtimeReload(3000);
   const { error } = await _sb.from('engineers').delete().eq('id', id);
   if(error){ console.error('Delete engineer failed:', error); alert('Delete failed: ' + error.message); }
 }
@@ -3771,6 +3787,7 @@ async function dbSavePM(pm){
     next_pms: displayToDbDate(pm.nextPMS),
     status: pm.status,
   };
+  suppressRealtimeReload(3000);
   const { error } = await _sb.from('pm_schedule').upsert(row);
   if(error){ console.error('Save PM failed:', error); alert('Save failed: ' + error.message); }
 }
@@ -3782,10 +3799,14 @@ async function dbSaveAmbiguity(a){
     flags: a.flags || [], suggestion: a.suggestion || '',
     resolution: a._resolution || null,
   };
+  suppressRealtimeReload(3000);
   const { error } = await _sb.from('ambiguities').upsert(row);
   if(error){ console.error('Save ambiguity failed:', error); }
 }
 async function dbBulkUpsertTickets(tickets){
+  // A bulk ticket upsert fires one realtime event per row. Keep our own
+  // session from refetching while the batches are in flight.
+  suppressRealtimeReload(60000);
   // Convert each ticket to DB shape, then upsert in batches of 500
   const rawRows = tickets.map(t => ({
     id: t.id, month: t.month, src_row: t.src_row,
@@ -4081,20 +4102,34 @@ async function bootApp(){
 const _RT_TABLES = ['tickets','pm_schedule','engineers','cmc_contracts','ambiguities'];
 let _rtChannels = [];       // [{ table, channel, status }]
 let _rtReloadTimer = null;
+// When THIS session writes to a table (upload, mark PM done, etc.), set
+// _rtSuppressUntil = Date.now() + N ms. Realtime events arriving in that
+// window are skipped — our in-memory state is already up to date and
+// refetching would just spam the UI with a reload we don't need.
+let _rtSuppressUntil = 0;
+function suppressRealtimeReload(ms){
+  _rtSuppressUntil = Math.max(_rtSuppressUntil, Date.now() + (ms || 3000));
+}
 function _scheduleRtReload(){
-  // Debounce: a batched upload can fire 300 events in a second. Collapse
-  // into one reload 400ms after the last event.
+  // If we just wrote data ourselves, skip — our RAW_TICKETS / PM_SCHEDULE
+  // etc. are already fresher than anything we'd get back from SELECT.
+  if(Date.now() < _rtSuppressUntil) return;
+  // Debounce: a batched upload by another user can fire 300 events in a
+  // second. Collapse into one reload 600ms after the last event.
   if(_rtReloadTimer) clearTimeout(_rtReloadTimer);
   _rtReloadTimer = setTimeout(async () => {
     _rtReloadTimer = null;
     try {
-      await loadAllFromDB();
+      // `silent: true` → no full-screen loader. This is a background
+      // refetch triggered by someone else's write; it must not hijack
+      // the UI of the person currently reading or editing.
+      await loadAllFromDB({ silent: true });
       renderAll();
       _flashLiveBadge();
     } catch(e){
       console.warn('[realtime] reload failed; will retry on next event', e);
     }
-  }, 400);
+  }, 600);
 }
 function _flashLiveBadge(){
   const el = document.getElementById('live-badge');
