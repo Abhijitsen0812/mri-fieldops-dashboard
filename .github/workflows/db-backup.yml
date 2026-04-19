@@ -28,7 +28,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install postgresql-client 16
+      - name: Install postgresql-client 17
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -38,7 +38,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/pg-archive.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-16
+          sudo apt-get install -y -qq postgresql-client-17
           pg_dump --version
 
       - name: Verify secrets are present
