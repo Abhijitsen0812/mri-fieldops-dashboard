@@ -3163,8 +3163,12 @@ async function submitPMComplete(){
     return;
   }
 
-  // 2) Update the schedule snapshot so the existing views stay correct
-  const completion = new Date(dateVal);
+  // 2) Update the schedule snapshot so the existing views stay correct.
+  // Parse the picker value as a local-time date — `new Date("YYYY-MM-DD")`
+  // parses as UTC midnight, which then drifts back a day when serialised
+  // in IST-adjacent timezones.
+  const [cy,cm,cd] = dateVal.split('-').map(Number);
+  const completion = new Date(cy, cm - 1, cd);
   pm.lastPMS = completion.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
   if(pm.freq && pm.freq > 0){
     const intervalMonths = Math.round(12 / pm.freq);
@@ -3947,7 +3951,12 @@ function dbDateToDisplay(d){
 function displayToDbDate(d){
   const parsed = parseFlexDate(d);
   if(!parsed) return null;
-  return parsed.toISOString().slice(0,10);
+  // Use local components — toISOString shifts to UTC and drifts the date
+  // by a day for timezones east of UTC (e.g. IST).
+  const yy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2,'0');
+  const dd = String(parsed.getDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
 }
 
 async function loadAllFromDB(opts = {}){
