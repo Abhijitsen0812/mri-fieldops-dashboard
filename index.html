@@ -740,7 +740,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 
   <!-- PM Calls from Service Log -->
   <div class="panel">
-    <div class="panel-head"><div class="panel-title">📅 PM Calls from Service Log</div></div>
+    <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div class="panel-title">📅 PM Calls from Service Log</div>
+      <button class="btn btn-ghost admin-only" id="pm-sync-btn" style="font-size:10px;padding:5px 12px" onclick="runPMSyncManual()" title="Create pm_completions rows from PMS tickets so engineer compliance tiles credit this work">↻ Sync to PM Compliance</button>
+    </div>
     <div style="overflow-x:auto">
       <table class="data-table">
         <thead><tr><th>TICKET ID</th><th>MONTH</th><th>CUSTOMER</th><th>MODEL</th><th>DATE</th><th>ENGINEER</th><th>NOTES</th><th>STATUS</th></tr></thead>
@@ -4270,6 +4273,168 @@ async function backfillPMEngineerIds({force=false}={}){
   await loadPMCompletions();
 }
 
+// Sync from Service Log: for every PMS-type ticket whose customer exists
+// in PM_SCHEDULE, create a pm_completions row (if one doesn't already
+// exist for that pm within ±7 days), applying the attribution rules to
+// the ticket's engineer field. Dedupes on re-run. Admin-only.
+let _pmSyncInFlight = null;
+let _pmSyncDoneThisSession = false;
+async function syncPMCompletionsFromTickets(){
+  if(typeof _sb === 'undefined' || !_sb) return { created: 0, flagged: 0, skipped: 0 };
+  if(_userRole !== 'admin') return { created: 0, flagged: 0, skipped: 0 };
+  if(_pmSyncInFlight) return _pmSyncInFlight;
+
+  _pmSyncInFlight = (async () => {
+    // Canonicalize PM_SCHEDULE customer → key so "KVC Diagnostic" and
+    // "KVC Diagnostics" (one in schedule, one in tickets) match.
+    const pmByCustKey = new Map();
+    PM_SCHEDULE.forEach(pm => {
+      let key = customerKey(pm.customer);
+      if(typeof normaliseCustomer === 'function'){
+        const n = normaliseCustomer(pm.customer);
+        if(n && n.asset_code !== '⚠UNMATCHED') key = customerKey(n.canonical);
+      }
+      if(!pmByCustKey.has(key)) pmByCustKey.set(key, []);
+      pmByCustKey.get(key).push(pm);
+    });
+
+    await loadPMCompletions();
+    const existingByPm = new Map();
+    _PM_COMPLETIONS.forEach(c => {
+      if(!existingByPm.has(c.pm_id)) existingByPm.set(c.pm_id, []);
+      existingByPm.get(c.pm_id).push(c);
+    });
+
+    const pmsTickets = RAW_TICKETS.filter(isPM);
+    const newRows = [];
+    const ambigRows = [];
+    let skipped = 0;
+
+    for(const t of pmsTickets){
+      const tDate = t._callDate || parseFlexDate(t.call_date);
+      if(!tDate){ skipped++; continue; }
+
+      const custK = customerKey(t.customer);
+      const candidates = pmByCustKey.get(custK) || [];
+      if(candidates.length === 0){ skipped++; continue; }
+
+      // Pick the PM whose contract window covers the ticket (if any). Else first.
+      let pm = candidates[0];
+      if(candidates.length > 1){
+        const inWindow = candidates.find(p => {
+          const cs = parseFlexDate(p.contractStart);
+          const ce = parseFlexDate(p.contractEnd);
+          return cs && ce && tDate >= cs && tDate <= ce;
+        });
+        if(inWindow) pm = inWindow;
+      }
+
+      // Skip if a completion already exists within ±7 days of this ticket.
+      const existing = existingByPm.get(pm.id) || [];
+      const dup = existing.find(c => {
+        const cd = parseFlexDate(c.completion_date);
+        return cd && Math.abs(dayDiff(cd, tDate)) <= 7;
+      });
+      if(dup){ skipped++; continue; }
+
+      const regional = getEngineersForRegion(pm.region);
+      const regionalIds = new Set(regional.map(e => e.id));
+      const canons = t._engCanons || splitEngineers(t.engineer);
+
+      const rosterIds = [];
+      const unresolved = [];
+      canons.forEach(canon => {
+        const e = ENGINEERS.find(x => rosterEngineerCanonicals(x).has(canon));
+        if(e) rosterIds.push(e.id); else unresolved.push(canon);
+      });
+
+      if(rosterIds.length === 0){
+        ambigRows.push({
+          id: `amb-pm-sync-${t.id}`,
+          month: t.month || null, row_num: t.src_row || 0,
+          customer: pm.customer,
+          issue: `PMS ticket ${t.id} (${t.call_date}) — engineer(s) not in roster: ${t.engineer || '(blank)'}`,
+          status: 'open', sys_status: 'pm-attribution',
+          flags: ['PM sync · unmapped engineer'], suggestion: '', resolution: null,
+        });
+        continue;
+      }
+
+      const regs = rosterIds.filter(id => regionalIds.has(id));
+      const nonregs = rosterIds.filter(id => !regionalIds.has(id));
+      const engIds = regs.length > 0 ? regs : nonregs;
+
+      if(unresolved.length > 0){
+        ambigRows.push({
+          id: `amb-pm-sync-${t.id}`,
+          month: t.month || null, row_num: t.src_row || 0,
+          customer: pm.customer,
+          issue: `PMS ticket ${t.id} (${t.call_date}) included unmapped engineer(s): ${unresolved.join(', ')}`,
+          status: 'open', sys_status: 'pm-attribution',
+          flags: ['PM sync · partial match'],
+          suggestion: `Credited: ${engIds.map(id => (ENGINEERS.find(e => e.id === id) || {}).name || id).join(', ')}`,
+          resolution: null,
+        });
+      }
+
+      const engNames = engIds.map(id => (ENGINEERS.find(e => e.id === id) || {}).name || id).join(' & ');
+      // YYYY-MM-DD in local time (avoid UTC drift on IST-adjacent dates).
+      const pad = n => String(n).padStart(2, '0');
+      const compDate = `${tDate.getFullYear()}-${pad(tDate.getMonth()+1)}-${pad(tDate.getDate())}`;
+
+      newRows.push({
+        pm_id: pm.id,
+        completion_date: compDate,
+        engineer_id: engIds[0],
+        engineer_ids: engIds,
+        engineer_name: engNames,
+        remarks: `Auto-synced from ticket ${t.id}${t.resolution ? ' — ' + t.resolution : ''}`.slice(0, 500),
+        created_by: _currentUser?.id || null,
+      });
+    }
+
+    if(newRows.length > 0){
+      const { error } = await _sb.from('pm_completions').insert(newRows);
+      if(error){ console.warn('PM sync insert failed:', error); }
+    }
+    if(ambigRows.length > 0){
+      await _sb.from('ambiguities').upsert(ambigRows);
+    }
+
+    invalidatePMCompletionsCache();
+    await loadPMCompletions();
+
+    console.log(`[pm-sync] ${newRows.length} created, ${ambigRows.length} flagged, ${skipped} skipped`);
+    return { created: newRows.length, flagged: ambigRows.length, skipped };
+  })();
+
+  try { return await _pmSyncInFlight; }
+  finally { _pmSyncInFlight = null; }
+}
+
+// Manual trigger from the PM Schedules page.
+async function runPMSyncManual(){
+  const btn = document.getElementById('pm-sync-btn');
+  if(!btn) return;
+  if(_userRole !== 'admin'){ alert('Admin only.'); return; }
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing…';
+  try {
+    const r = await syncPMCompletionsFromTickets();
+    btn.textContent = `✓ ${r.created} created · ${r.flagged} flagged`;
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 4000);
+    if(r.flagged > 0){
+      setTimeout(() => alert(`Sync complete.\n\nCreated: ${r.created}\nSkipped (already present): ${r.skipped}\nFlagged for review: ${r.flagged}\n\nSee Flags & Ambiguities for rows needing admin attention.`), 100);
+    }
+    if(typeof renderPM === 'function') renderPM();
+  } catch(e){
+    console.error('PM sync failed', e);
+    btn.textContent = '⚠ Sync failed';
+    setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 3000);
+  }
+}
+
 // Colour a percentage by healthy/warn/critical thresholds.
 function epPctColor(pct, goodAbove=80, okAbove=60){
   if(pct == null) return 'var(--text-dim)';
@@ -4300,7 +4465,17 @@ async function renderEngineerPerformance(){
   // Fire-and-forget — backfills legacy pm_completions rows with engineer_ids
   // on an admin's first render per session. Failures are non-fatal; the
   // page still renders with whatever data we have.
-  backfillPMEngineerIds().catch(err => console.warn('PM backfill failed:', err));
+  backfillPMEngineerIds()
+    .then(() => {
+      // Then sync PMS tickets → pm_completions so tile compliance reflects
+      // work logged via Service Log, not just rows manually marked complete
+      // through the PM modal. Idempotent — dedupes on pm_id ±7d.
+      if(!_pmSyncDoneThisSession){
+        _pmSyncDoneThisSession = true;
+        return syncPMCompletionsFromTickets();
+      }
+    })
+    .catch(err => console.warn('PM backfill/sync failed:', err));
 
   const windowVal = document.getElementById('ep-window')?.value || '90';
   const regionVal = document.getElementById('ep-region')?.value || 'all';
