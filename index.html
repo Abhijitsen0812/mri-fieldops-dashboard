@@ -979,15 +979,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
       <div class="modal-close" onclick="closeModal('pm-complete-modal')">×</div>
     </div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div>
-          <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Completion Date *</label>
-          <input type="date" id="pm-complete-date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:12px">
-        </div>
-        <div>
-          <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Engineer Performed *</label>
-          <select id="pm-complete-engineer" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px"></select>
-        </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Completion Date *</label>
+        <input type="date" id="pm-complete-date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:12px;max-width:220px">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Engineers Performed *</label>
+        <div id="pm-complete-engineers" style="display:flex;flex-wrap:wrap;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;min-height:40px"></div>
+        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">Tap to toggle. Regional engineers are pre-selected. Pick every engineer who visited — both get credit.</div>
       </div>
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Remarks / Observations</label>
@@ -3544,14 +3543,22 @@ function openPMCompleteModal(pmId){
   dateEl.max   = todayIso;
   dateEl.onchange = updatePMCompletePreview;
 
-  // Engineer dropdown — preselect the only regional engineer if unambiguous
+  // Engineer chips — multi-select. Regional primaries are pre-ticked by
+  // default (user rule: both regional engineers are primary). Tapping
+  // any chip toggles it. A non-regional engineer picked here means a
+  // cross-region coverage case — that will flow into the covering
+  // engineer's own region tile per the attribution rules.
   const regional = getEngineersForRegion(pm.region);
-  const options = ENGINEERS.map(e => {
-    const selected = regional.length === 1 && regional[0].id === e.id ? ' selected' : '';
-    return `<option value="${esc(e.id)}"${selected}>${esc(e.name)} — ${esc(e.region)}</option>`;
+  const regionalIds = new Set(regional.map(e => e.id));
+  const chipsHtml = ENGINEERS.map(e => {
+    const preselected = regionalIds.has(e.id);
+    return `<button type="button" class="pm-eng-chip" data-eng-id="${esc(e.id)}" data-selected="${preselected}" onclick="togglePMEngineerChip(this)" ` +
+      `style="font-size:11px;padding:5px 11px;border-radius:999px;border:1px solid var(--border);cursor:pointer;font-family:inherit;` +
+      `background:${preselected?'rgba(34,197,94,.15)':'var(--surface2)'};color:${preselected?'var(--green)':'var(--text)'};` +
+      `border-color:${preselected?'rgba(34,197,94,.4)':'var(--border)'}">` +
+      `${esc(e.name)} <span style="color:var(--text-faint);font-size:10px">${esc(e.region)}</span></button>`;
   }).join('');
-  document.getElementById('pm-complete-engineer').innerHTML =
-    '<option value="">— Select engineer —</option>' + options;
+  document.getElementById('pm-complete-engineers').innerHTML = chipsHtml;
 
   document.getElementById('pm-complete-remarks').value = '';
   document.getElementById('pm-complete-submit').disabled = false;
@@ -3579,6 +3586,22 @@ function updatePMCompletePreview(){
                   `<span style="color:var(--text-faint)">(+${intervalMonths} mo from completion, ${pm.freq}× per year)</span>`;
 }
 
+// Toggle a chip's selected state in the PM-complete modal.
+function togglePMEngineerChip(btn){
+  const selected = btn.dataset.selected === 'true';
+  const next = !selected;
+  btn.dataset.selected = next;
+  btn.style.background   = next ? 'rgba(34,197,94,.15)' : 'var(--surface2)';
+  btn.style.color        = next ? 'var(--green)'        : 'var(--text)';
+  btn.style.borderColor  = next ? 'rgba(34,197,94,.4)'  : 'var(--border)';
+}
+
+// Read currently-selected engineer IDs out of the PM-complete modal chips.
+function getPMSelectedEngineerIds(){
+  return [...document.querySelectorAll('#pm-complete-engineers .pm-eng-chip[data-selected="true"]')]
+    .map(el => el.dataset.engId);
+}
+
 async function submitPMComplete(){
   const pmId = _pmCompletePendingId;
   const pm = PM_SCHEDULE.find(p => p.id === pmId);
@@ -3586,14 +3609,22 @@ async function submitPMComplete(){
   if(!canManagePM()){ alert('This action requires admin or manager access.'); return; }
 
   const dateVal = document.getElementById('pm-complete-date').value;
-  const engId   = document.getElementById('pm-complete-engineer').value;
+  const engIds  = getPMSelectedEngineerIds();
   const remarks = document.getElementById('pm-complete-remarks').value.trim();
 
   if(!dateVal){ alert('Please select a completion date.'); return; }
   if(new Date(dateVal) > new Date()){ alert('Completion date cannot be in the future.'); return; }
-  if(!engId){   alert('Please select the engineer who performed the PM.'); return; }
+  if(engIds.length === 0){ alert('Please select at least one engineer who performed the PM.'); return; }
 
+  // Primary engineer column stays populated (first selected) so legacy
+  // audit queries keep working. The multi-engineer truth lives in
+  // engineer_ids[].
+  const engId = engIds[0];
   const eng = ENGINEERS.find(e => e.id === engId);
+  const engNames = engIds.map(id => {
+    const e = ENGINEERS.find(x => x.id === id);
+    return e ? e.name : id;
+  }).join(' & ');
   const submitBtn = document.getElementById('pm-complete-submit');
   submitBtn.disabled = true;
   submitBtn.textContent = 'Saving…';
@@ -3603,7 +3634,8 @@ async function submitPMComplete(){
     pm_id: pmId,
     completion_date: dateVal,
     engineer_id: engId,
-    engineer_name: eng ? eng.name : null,
+    engineer_ids: engIds,
+    engineer_name: engNames,
     remarks: remarks || null,
     created_by: _currentUser?.id || null
   });
@@ -4023,7 +4055,16 @@ function computeEngineerMetrics(eng, windowStart){
   const comps = [];
   let pmLate = 0, pmScored = 0;
   _PM_COMPLETIONS.forEach(c => {
-    if(!engIds.has(c.engineer_id)) return;
+    // Credit every engineer in engineer_ids[]. Fall back to the legacy
+    // scalar engineer_id for rows that pre-date the backfill. This is
+    // what makes a two-engineer PM (e.g. both Bangalore primaries on
+    // a shared visit) land on both their tiles, and what lets a
+    // cross-region solo coverage pull into the covering engineer's
+    // home-region compliance number.
+    const credited = (Array.isArray(c.engineer_ids) && c.engineer_ids.length)
+      ? c.engineer_ids
+      : (c.engineer_id ? [c.engineer_id] : []);
+    if(!credited.some(id => engIds.has(id))) return;
     const done = parseFlexDate(c.completion_date);
     if(!done) return;
     if(windowStart && done < windowStart) return;
@@ -4088,13 +4129,145 @@ async function loadPMCompletions(){
   if(_pmCompletionsInFlight) return _pmCompletionsInFlight;
   _pmCompletionsInFlight = (async () => {
     const { data, error } = await _sb.from('pm_completions')
-      .select('pm_id,completion_date,engineer_id,engineer_name,remarks,created_at')
+      .select('id,pm_id,completion_date,engineer_id,engineer_ids,engineer_name,remarks,created_at')
       .order('completion_date', {ascending:false});
     if(error){ console.warn('pm_completions load failed:', error.message); _PM_COMPLETIONS = []; }
     else { _PM_COMPLETIONS = data || []; _pmCompletionsFetchedAt = Date.now(); }
     _pmCompletionsInFlight = null;
   })();
   return _pmCompletionsInFlight;
+}
+
+// One-time backfill: derive engineer_ids[] for legacy pm_completions rows
+// by cross-referencing the matching service-report ticket (same customer,
+// PMS/PM call_type, within ±PM_WINDOW_DAYS of completion_date).
+//
+// Attribution rules (per user spec):
+//   • Default: all regional engineers are primary for that region.
+//   • Ticket's engineer list is the source of truth for who visited.
+//   • If regional engineer(s) visited → credit them (non-regional helpers
+//     do NOT get credit in a mixed visit).
+//   • If only non-regional engineer(s) visited → cross-region solo
+//     coverage; credit them (lands in their home-region tile).
+//   • No matching ticket → fall back to regional primaries.
+//   • Roster-unmappable engineer on the ticket → ambiguity for admin.
+//
+// Idempotent: skips rows that already have a non-empty engineer_ids.
+// Runs once per session on admin's Engineer-Performance render.
+let _pmBackfillDoneThisSession = false;
+async function backfillPMEngineerIds({force=false}={}){
+  if(typeof _sb === 'undefined' || !_sb) return;
+  if(_userRole !== 'admin') return;
+  if(_pmBackfillDoneThisSession && !force) return;
+  _pmBackfillDoneThisSession = true;
+
+  const candidates = _PM_COMPLETIONS.filter(c =>
+    !Array.isArray(c.engineer_ids) || c.engineer_ids.length === 0);
+  if(candidates.length === 0) return;
+
+  const updates = [];
+  const ambiguityRows = [];
+
+  for(const c of candidates){
+    const pm = PM_BY_ID.get(c.pm_id);
+    if(!pm){ continue; }
+    const custK = customerKey(pm.customer);
+    const compDate = parseFlexDate(c.completion_date);
+    if(!compDate) continue;
+
+    // Find matching PMS ticket(s) — same customer, PM call_type, within ±window.
+    const matches = RAW_TICKETS.filter(t => {
+      if(!isPM(t)) return false;
+      if(customerKey(t.customer) !== custK) return false;
+      const td = t._callDate || parseFlexDate(t.call_date);
+      if(!td) return false;
+      return Math.abs(dayDiff(td, compDate)) <= PM_WINDOW_DAYS;
+    });
+
+    const regional = getEngineersForRegion(pm.region);
+    const regionalIds = new Set(regional.map(e => e.id));
+
+    let resolvedIds = [];
+    let flag = null;
+
+    if(matches.length === 0){
+      // Default rule: regional primaries.
+      if(regional.length > 0){ resolvedIds = regional.map(e => e.id); }
+      else { flag = `No matching PMS ticket and no regional engineers defined for ${pm.region}`; }
+    } else {
+      // Union of all engineers across matching tickets.
+      const canonSet = new Set();
+      matches.forEach(t => (t._engCanons || splitEngineers(t.engineer)).forEach(x => canonSet.add(x)));
+      const rosterIds = [];
+      const unresolved = [];
+      canonSet.forEach(canon => {
+        const e = ENGINEERS.find(x => rosterEngineerCanonicals(x).has(canon));
+        if(e) rosterIds.push(e.id);
+        else unresolved.push(canon);
+      });
+
+      if(rosterIds.length === 0){
+        flag = `PMS ticket found but engineer(s) not in roster: ${[...canonSet].join(', ') || '(blank)'}`;
+      } else {
+        const regionals    = rosterIds.filter(id =>  regionalIds.has(id));
+        const nonRegionals = rosterIds.filter(id => !regionalIds.has(id));
+        // Regional primaries present → credit only them.
+        // Otherwise → cross-region solo coverage, credit non-regionals.
+        resolvedIds = regionals.length > 0 ? regionals : nonRegionals;
+        if(unresolved.length > 0){
+          // Partial resolution is fine — we credit who we could map,
+          // but we still flag so the admin can confirm the unknown name.
+          ambiguityRows.push({
+            id: `amb-pm-${c.id || (c.pm_id + '-' + c.completion_date)}`,
+            month: (c.completion_date || '').slice(0, 7) || null,
+            row_num: 0,
+            customer: pm.customer,
+            issue: `PM on ${c.completion_date} included unmapped engineer(s): ${unresolved.join(', ')}`,
+            status: 'open',
+            sys_status: 'pm-attribution',
+            flags: ['PM attribution · partial match'],
+            suggestion: `Credited: ${resolvedIds.map(id => (ENGINEERS.find(e => e.id === id) || {}).name || id).join(', ')}`,
+            resolution: null,
+          });
+        }
+      }
+    }
+
+    if(flag){
+      ambiguityRows.push({
+        id: `amb-pm-${c.id || (c.pm_id + '-' + c.completion_date)}`,
+        month: (c.completion_date || '').slice(0, 7) || null,
+        row_num: 0,
+        customer: pm.customer,
+        issue: `PM completion on ${c.completion_date} — ${flag}`,
+        status: 'open',
+        sys_status: 'pm-attribution',
+        flags: ['PM attribution · unresolved'],
+        suggestion: '',
+        resolution: null,
+      });
+    } else if(resolvedIds.length > 0 && c.id != null){
+      updates.push({ id: c.id, engineer_ids: resolvedIds });
+    }
+  }
+
+  if(updates.length === 0 && ambiguityRows.length === 0) return;
+  console.log(`[pm-backfill] ${updates.length} attribution update(s), ${ambiguityRows.length} ambiguity row(s)`);
+
+  // Small counts → row-by-row update is fine. Pools concurrency at 4.
+  const CONCURRENCY = 4;
+  for(let i = 0; i < updates.length; i += CONCURRENCY){
+    const batch = updates.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(u =>
+      _sb.from('pm_completions').update({ engineer_ids: u.engineer_ids }).eq('id', u.id)
+    ));
+  }
+  if(ambiguityRows.length > 0){
+    await _sb.from('ambiguities').upsert(ambiguityRows);
+  }
+
+  invalidatePMCompletionsCache();
+  await loadPMCompletions();
 }
 
 // Colour a percentage by healthy/warn/critical thresholds.
@@ -4124,6 +4297,10 @@ async function renderEngineerPerformance(){
   if(!canManagePM()) return;
   epPopulateRegionFilter();
   await loadPMCompletions();
+  // Fire-and-forget — backfills legacy pm_completions rows with engineer_ids
+  // on an admin's first render per session. Failures are non-fatal; the
+  // page still renders with whatever data we have.
+  backfillPMEngineerIds().catch(err => console.warn('PM backfill failed:', err));
 
   const windowVal = document.getElementById('ep-window')?.value || '90';
   const regionVal = document.getElementById('ep-region')?.value || 'all';
@@ -4284,17 +4461,30 @@ function openEngineerDetail(engId, metricKey){
         : late
           ? '<span class="badge critical">LATE</span>'
           : '<span class="badge">ON TIME</span>';
+      // Who got credit. Prefer engineer_ids[] when present, fall back to
+      // the legacy scalar. Highlight the engineer whose tile we're on so
+      // pair-visits read clearly.
+      const credIds = (Array.isArray(c.engineer_ids) && c.engineer_ids.length)
+        ? c.engineer_ids
+        : (c.engineer_id ? [c.engineer_id] : []);
+      const credChips = credIds.map(id => {
+        const e = ENGINEERS.find(x => x.id === id);
+        const label = e ? e.name : id;
+        const self = id === eng.id;
+        return `<span class="badge" style="font-size:9px;padding:2px 6px;margin-right:3px;background:${self?'rgba(34,197,94,.15)':'rgba(148,163,184,.15)'};color:${self?'var(--green)':'var(--text-dim)'}">${esc(label)}</span>`;
+      }).join('') || '<span style="color:var(--text-faint);font-size:10px">—</span>';
       return `<tr>
         <td style="font-family:var(--mono);font-size:10px">${esc(c.completion_date||'—')}</td>
         <td style="font-size:11px">${esc(pm?.customer || c.engineer_name || '—')}</td>
         <td style="font-size:11px;color:var(--text-dim)">${esc(pm?.system || pm?.modality || '—')}</td>
+        <td>${credChips}</td>
         <td style="font-family:var(--mono);font-size:10px">${esc(fmtDue(due))}</td>
         <td>${statusBadge}</td>
       </tr>`;
     }).join('');
     tableHtml = `<table class="data-table" style="margin:0">
-      <thead><tr><th>COMPLETED</th><th>CUSTOMER</th><th>SYSTEM</th><th>DUE</th><th>STATUS</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-dim)">No PM completions in this window.</td></tr>'}</tbody>
+      <thead><tr><th>COMPLETED</th><th>CUSTOMER</th><th>SYSTEM</th><th>CREDITED</th><th>DUE</th><th>STATUS</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-dim)">No PM completions in this window.</td></tr>'}</tbody>
     </table>`;
   } else {
     // tickets / tickets-sla / tickets-ftf share the same row shape, extra column by mode.
