@@ -3633,7 +3633,7 @@ async function submitPMComplete(){
   submitBtn.textContent = 'Saving…';
 
   // 1) Write the completion row (audit trail + feeds performance metrics later)
-  const { error: insErr } = await _sb.from('pm_completions').insert({
+  const payload = {
     pm_id: pmId,
     completion_date: dateVal,
     engineer_id: engId,
@@ -3641,7 +3641,16 @@ async function submitPMComplete(){
     engineer_name: engNames,
     remarks: remarks || null,
     created_by: _currentUser?.id || null
-  });
+  };
+  // Graceful fallback: if the 0001 migration hasn't run yet, drop
+  // engineer_ids from the payload so the insert still lands. The
+  // multi-engineer credit will be limited to engineer_ids[0] until
+  // the admin applies the migration — on next admin sync the rest
+  // of the engineers will be populated.
+  if(!(await hasEngineerIdsColumn())){
+    delete payload.engineer_ids;
+  }
+  const { error: insErr } = await _sb.from('pm_completions').insert(payload);
   if(insErr){
     console.error('PM completion insert failed:', insErr);
     alert('Failed to save PM completion: ' + insErr.message);
@@ -4131,9 +4140,20 @@ async function loadPMCompletions(){
   if(fresh) return;
   if(_pmCompletionsInFlight) return _pmCompletionsInFlight;
   _pmCompletionsInFlight = (async () => {
-    const { data, error } = await _sb.from('pm_completions')
+    // Try the full select first. If the engineer_ids column isn't there
+    // yet (0001 migration pending), gracefully fall back to the legacy
+    // columns so the compliance tile keeps rendering — just without
+    // multi-engineer credit until the DDL ships.
+    let { data, error } = await _sb.from('pm_completions')
       .select('id,pm_id,completion_date,engineer_id,engineer_ids,engineer_name,remarks,created_at')
       .order('completion_date', {ascending:false});
+    if(error && /engineer_ids/.test(error.message || '')){
+      console.warn('[pm-compliance] engineer_ids column missing — falling back to legacy select. Run db/migrations/0001.');
+      const retry = await _sb.from('pm_completions')
+        .select('id,pm_id,completion_date,engineer_id,engineer_name,remarks,created_at')
+        .order('completion_date', {ascending:false});
+      data = retry.data; error = retry.error;
+    }
     if(error){ console.warn('pm_completions load failed:', error.message); _PM_COMPLETIONS = []; }
     else { _PM_COMPLETIONS = data || []; _pmCompletionsFetchedAt = Date.now(); }
     _pmCompletionsInFlight = null;
@@ -4162,6 +4182,10 @@ async function backfillPMEngineerIds({force=false}={}){
   if(typeof _sb === 'undefined' || !_sb) return;
   if(_userRole !== 'admin') return;
   if(_pmBackfillDoneThisSession && !force) return;
+  if(!(await hasEngineerIdsColumn())){
+    console.warn('[pm-backfill] skipped: engineer_ids column missing — run db/migrations/0001_pm_completions_engineer_ids.sql');
+    return;
+  }
   _pmBackfillDoneThisSession = true;
 
   const candidates = _PM_COMPLETIONS.filter(c =>
@@ -4279,10 +4303,28 @@ async function backfillPMEngineerIds({force=false}={}){
 // the ticket's engineer field. Dedupes on re-run. Admin-only.
 let _pmSyncInFlight = null;
 let _pmSyncDoneThisSession = false;
+
+// Pre-flight: is the engineer_ids column actually on pm_completions?
+// Without the 0001 migration the whole pipeline silently no-ops, so
+// check once per session and surface a loud error to the admin.
+let _pmEngineerIdsColumnOK = null;
+async function hasEngineerIdsColumn(){
+  if(_pmEngineerIdsColumnOK !== null) return _pmEngineerIdsColumnOK;
+  if(!_sb){ return false; }
+  const { error } = await _sb.from('pm_completions').select('engineer_ids').limit(1);
+  _pmEngineerIdsColumnOK = !error;
+  if(error){ console.warn('[pm-compliance] engineer_ids column missing:', error.message); }
+  return _pmEngineerIdsColumnOK;
+}
+
 async function syncPMCompletionsFromTickets(){
   if(typeof _sb === 'undefined' || !_sb) return { created: 0, flagged: 0, skipped: 0 };
   if(_userRole !== 'admin') return { created: 0, flagged: 0, skipped: 0 };
   if(_pmSyncInFlight) return _pmSyncInFlight;
+
+  if(!(await hasEngineerIdsColumn())){
+    return { created: 0, flagged: 0, skipped: 0, error: 'MIGRATION_MISSING' };
+  }
 
   _pmSyncInFlight = (async () => {
     // Canonicalize PM_SCHEDULE customer → key so "KVC Diagnostic" and
@@ -4393,19 +4435,27 @@ async function syncPMCompletionsFromTickets(){
       });
     }
 
+    let insertError = null;
+    let createdCount = 0;
     if(newRows.length > 0){
       const { error } = await _sb.from('pm_completions').insert(newRows);
-      if(error){ console.warn('PM sync insert failed:', error); }
+      if(error){
+        console.error('PM sync insert failed:', error);
+        insertError = error.message || String(error);
+      } else {
+        createdCount = newRows.length;
+      }
     }
     if(ambigRows.length > 0){
-      await _sb.from('ambiguities').upsert(ambigRows);
+      const { error: ae } = await _sb.from('ambiguities').upsert(ambigRows);
+      if(ae) console.warn('PM sync ambiguity upsert failed:', ae);
     }
 
     invalidatePMCompletionsCache();
     await loadPMCompletions();
 
-    console.log(`[pm-sync] ${newRows.length} created, ${ambigRows.length} flagged, ${skipped} skipped`);
-    return { created: newRows.length, flagged: ambigRows.length, skipped };
+    console.log(`[pm-sync] ${createdCount} created, ${ambigRows.length} flagged, ${skipped} skipped${insertError?' · ERROR: '+insertError:''}`);
+    return { created: createdCount, flagged: ambigRows.length, skipped, error: insertError };
   })();
 
   try { return await _pmSyncInFlight; }
@@ -4422,10 +4472,22 @@ async function runPMSyncManual(){
   btn.textContent = '⏳ Syncing…';
   try {
     const r = await syncPMCompletionsFromTickets();
+    if(r.error === 'MIGRATION_MISSING'){
+      btn.textContent = '⚠ DB migration not run';
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 5000);
+      alert(`PM Compliance schema is out of date.\n\nThe pm_completions table is missing the engineer_ids column. Run this SQL in the Supabase SQL editor (staging project), then try again:\n\n  alter table public.pm_completions add column if not exists engineer_ids text[];\n  create index if not exists pm_completions_engineer_ids_idx\n    on public.pm_completions using gin(engineer_ids);\n\nFull migration: db/migrations/0001_pm_completions_engineer_ids.sql`);
+      return;
+    }
+    if(r.error){
+      btn.textContent = '⚠ Sync failed';
+      setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 4000);
+      alert(`Sync failed while inserting rows:\n\n${r.error}\n\nNo rows were written. See the browser console for details.`);
+      return;
+    }
     btn.textContent = `✓ ${r.created} created · ${r.flagged} flagged`;
     setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 4000);
-    if(r.flagged > 0){
-      setTimeout(() => alert(`Sync complete.\n\nCreated: ${r.created}\nSkipped (already present): ${r.skipped}\nFlagged for review: ${r.flagged}\n\nSee Flags & Ambiguities for rows needing admin attention.`), 100);
+    if(r.created > 0 || r.flagged > 0){
+      setTimeout(() => alert(`Sync complete.\n\nCreated: ${r.created}\nSkipped (already present): ${r.skipped}\nFlagged for review: ${r.flagged}\n\n${r.flagged > 0 ? 'See Flags & Ambiguities for rows needing admin attention.' : ''}`), 100);
     }
     if(typeof renderPM === 'function') renderPM();
   } catch(e){
