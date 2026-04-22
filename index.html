@@ -1028,7 +1028,7 @@ let RAW_TICKETS = [{"id": "TKT-Oct2025-001", "month": "Oct 2025", "src_row": 2, 
 let CONFIG_ASSETS = []; // seeded by applyInstallBaseOverlay() from INSTALL_BASE_V2
 
 // ══════════════════════════════════════════════════════════════════
-// INSTALL_BASE_V2 — 24-record source of truth from "Install Base list.xlsx".
+// INSTALL_BASE_V2 — 25-record source of truth from "Install Base list.xlsx".
 // Used to overlay canonical xlsx names/specs onto CONFIG_ASSETS after any
 // Supabase/xlsx load, so the Install Base page always reflects the xlsx
 // regardless of legacy DB drift.
@@ -1058,6 +1058,7 @@ const INSTALL_BASE_V2 = [
   {sn:22, code:'AN022', ast_id:'AST022', name:'Ruby Sangamner',                       tesla:'1.5T',   model:'Anamaya 1.5T',               town:'Sangamner',   state:'MH', channel:'16CH',      gradient:'',           sw:'4.2C',       compressor:'',           coldhead:'RDK-412'},
   {sn:23, code:'AN023', ast_id:'AST023', name:'Ruby Phaltan',                         tesla:'1.5T',   model:'Philips 1.5 T Intera',       town:'Phaltan',     state:'MH', channel:'CDAS 8CH',  gradient:'271 Single', sw:'R3.2.3',     compressor:'HC-8E',      coldhead:'F2000'},
   {sn:24, code:'AN024', ast_id:'AST024', name:'District Hospital, Champawat',         tesla:'1.5T',   model:'Anamaya 1.5T',               town:'Champawat',   state:'UK', channel:'16CH',      gradient:'',           sw:'4.2C',       compressor:'',           coldhead:'RDK-412'},
+  {sn:25, code:'AN025', ast_id:'AST025', name:'KVC Diagnostics',                       tesla:'1.5T',   model:'Philips 1.5 T Achieva',      town:'Mysore',      state:'KA', channel:'CDAS 16CH', gradient:'281',        sw:'R5.7.1',     compressor:'HC-8E',      coldhead:'F2000'},
 ];
 
 // Rebuild CONFIG_ASSETS from INSTALL_BASE_V2 and carry over the {open_calls,
@@ -1273,8 +1274,8 @@ function countByMonth(arr){
 // ══════════════════════════════════════════════════════════════════
 // CUSTOMER NAME CANONICALISATION
 // ──────────────────────────────────────────────────────────────────
-// Source of truth: "Install Base list.xlsx" (24 records, codes AN001-AN024).
-// All variants (legacy spellings, old codes, typos) map into one of the 24
+// Source of truth: "Install Base list.xlsx" (25 records, codes AN001-AN025).
+// All variants (legacy spellings, old codes, typos) map into one of the 25
 // canonicals. Out-of-install-base entities kept below as separate canonicals.
 // asset_code === '' → not in Install Base (new/visiting site).
 // Fuzzy-match fallback handles typos within Levenshtein ratio 0.88.
@@ -1288,7 +1289,7 @@ const CUSTOMER_NORMALISATION = (function(){
     });
   };
 
-  // ─── Install Base (24 xlsx canonicals) ─────────────────────────────
+  // ─── Install Base (25 xlsx canonicals) ─────────────────────────────
 
   // AN001 — BGTH (was "HKES Basaveshwara"; xlsx says "BGTH")
   add(['bgth','btgh','btgh, kalaburgi','btgh kalaburgi','btgh kalburgi',
@@ -1442,11 +1443,14 @@ const CUSTOMER_NORMALISATION = (function(){
        'government hospital champawat','district hospital champawat'],
       'District Hospital, Champawat','Champawat','AN024','Unassigned');
 
+  // AN025 — KVC Diagnostics (Mysore; added to Install Base in xlsx v2.1)
+  add(['kvc diagnostics','kvc diagnostic centre','kvc diagnostic centre, mysore',
+       'kvc diagnostic','kvc diagnostics,mysore','kvc diagnostics, mysore',
+       'kvc, mysore','kvc mysore','kvc'],
+      'KVC Diagnostics','Mysore','AN025','Bangalore');
+
   // ─── Non-install-base canonicals (service history only, no AN code) ─
 
-  add(['kvc diagnostic centre','kvc diagnostic centre, mysore','kvc diagnostic',
-       'kvc diagnostics','kvc diagnostics,mysore','kvc, mysore','kvc mysore','kvc'],
-      'KVC Diagnostic Centre','Mysuru','','Bangalore');
   add(['mahabodhi medical college','mahabodhi medical collage'],
       'Mahabodhi Medical College','','','Patna');
   add(['nmr scan centre','nmr scan centre, dharwad','nmr, dharwad','nmr dharwad',
