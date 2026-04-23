@@ -2074,35 +2074,49 @@ function detectAmbiguousTickets(tickets){
 }
 
 // Merge auto-detected ambiguities into AMBIGUITIES in-memory + Supabase,
-// preserving any prior admin review on matching ids.
+// preserving any prior admin review/status/resolution on matching ids.
+//
+// State-aware semantics (why two paths):
+//   • NEW finding (no prior row) → INSERT with default status='Review Required'.
+//   • PRIOR row (id already exists in AMBIGUITIES) → UPDATE only the
+//     descriptive columns (customer/issue/flags/etc). Never touch the
+//     workflow columns: status, review, resolution, resolved_at,
+//     resolved_by. Those are admin-managed — a blind .upsert() that
+//     included them would reset Closed → 'Review Required' on every
+//     subsequent upload, which is exactly the regression we're fixing.
 async function persistAutoAmbiguities(findings){
   if(!Array.isArray(findings) || findings.length === 0) return 0;
 
   const existingById = new Map(AMBIGUITIES.map(a => [a.id, a]));
-  const toUpsert = [];
+  const freshInserts = [];   // genuinely new findings — full initial payload
+  const priorUpdates = [];   // re-detected findings — descriptive-only
   let newCount = 0;
 
   findings.forEach(f => {
     const prior = existingById.get(f.id);
     if(prior){
-      // Keep prior review intact; refresh the descriptive fields.
+      // Refresh descriptive fields only. DO NOT mutate prior.status —
+      // that is workflow state owned by the admin review panel.
       prior.month = f.month; prior.row = f.row; prior.customer = f.customer;
-      prior.issue = f.issue; prior.status = f.status;
+      prior.issue = f.issue;
       prior.sys_status = f.sys_status; prior.flags = f.flags;
       prior.suggestion = f.suggestion;
-      toUpsert.push({
+      priorUpdates.push({
         id: prior.id,
         month: prior.month === '—' ? null : prior.month,
         row_num: prior.row || 0,
         customer: prior.customer, issue: prior.issue,
-        status: prior.status, sys_status: prior.sys_status,
+        sys_status: prior.sys_status,
         flags: prior.flags || [], suggestion: prior.suggestion || '',
+        // status / review / resolution / resolved_at / resolved_by
+        // deliberately omitted — PostgREST UPDATE leaves unlisted
+        // columns untouched, so admin state survives the upload.
       });
     } else {
       const fresh = { ...f, review: null, _resolution: null, resolved_at: null };
       AMBIGUITIES.push(fresh);
       newCount++;
-      toUpsert.push({
+      freshInserts.push({
         id: f.id,
         month: f.month === '—' ? null : f.month,
         row_num: f.row || 0,
@@ -2115,8 +2129,21 @@ async function persistAutoAmbiguities(findings){
 
   try {
     suppressRealtimeReload(5000);
-    const { error } = await _sb.from('ambiguities').upsert(toUpsert);
-    if(error) console.warn('Auto-ambiguity upsert failed:', error);
+    // New rows: plain upsert (INSERT ON CONFLICT UPDATE). On the off-chance
+    // a row with the same id was created by another session between our
+    // AMBIGUITIES read and this write, onConflict+ignoreDuplicates ensures
+    // we never overwrite an existing admin review.
+    if(freshInserts.length > 0){
+      const { error } = await _sb.from('ambiguities')
+        .upsert(freshInserts, { onConflict: 'id', ignoreDuplicates: true });
+      if(error) console.warn('Auto-ambiguity insert failed:', error);
+    }
+    // Prior rows: UPDATE per id so status/review/resolution are never
+    // part of the column list and therefore can't be stomped.
+    for(const row of priorUpdates){
+      const { error } = await _sb.from('ambiguities').update(row).eq('id', row.id);
+      if(error) console.warn('Auto-ambiguity refresh failed for', row.id, error);
+    }
   } catch(e){
     console.warn('Auto-ambiguity upsert threw:', e);
   }
@@ -4487,7 +4514,12 @@ async function backfillPMEngineerIds({force=false}={}){
     ));
   }
   if(ambiguityRows.length > 0){
-    await _sb.from('ambiguities').upsert(ambiguityRows);
+    // ignoreDuplicates: an ambiguity row already in DB for this id was
+    // either auto-created earlier or manually resolved by an admin — either
+    // way, overwriting it would wipe review/resolution/resolved_at. Only
+    // insert genuinely-new findings; existing rows keep their admin state.
+    await _sb.from('ambiguities')
+      .upsert(ambiguityRows, { onConflict: 'id', ignoreDuplicates: true });
   }
 
   invalidatePMCompletionsCache();
@@ -4644,8 +4676,51 @@ async function syncPMCompletionsFromTickets(){
       }
     }
     if(ambigRows.length > 0){
-      const { error: ae } = await _sb.from('ambiguities').upsert(ambigRows);
+      // ignoreDuplicates so a re-run doesn't clobber admin-set review,
+      // resolution, resolved_at on an `amb-pm-sync-<ticket>` row that was
+      // already closed out in a previous session.
+      const { error: ae } = await _sb.from('ambiguities')
+        .upsert(ambigRows, { onConflict: 'id', ignoreDuplicates: true });
       if(ae) console.warn('PM sync ambiguity upsert failed:', ae);
+    }
+
+    // Roll pm_schedule forward: for each PM we just credited with a new
+    // completion, bump lastPMS to the latest completion date and shift
+    // nextPMS by the PM's frequency window. Without this, the PM Schedules
+    // page keeps showing the PM as overdue/in-window because pmStatus()
+    // derives state purely from pm.nextPMS — independent of pm_completions.
+    if(newRows.length > 0 && !insertError){
+      try {
+        const latestByPm = new Map();
+        newRows.forEach(r => {
+          const prev = latestByPm.get(r.pm_id);
+          if(!prev || r.completion_date > prev) latestByPm.set(r.pm_id, r.completion_date);
+        });
+        for(const [pmId, compIso] of latestByPm){
+          const pm = PM_SCHEDULE.find(p => p.id === pmId);
+          if(!pm) continue;
+          // Only advance — never rewind — the schedule.
+          const priorLast = parseFlexDate(pm.lastPMS);
+          const [cy,cm,cd] = compIso.split('-').map(Number);
+          const compDate = new Date(cy, cm - 1, cd);
+          if(priorLast && compDate <= priorLast) continue;
+          pm.lastPMS = compDate.toLocaleDateString('en-GB',
+            {day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+          if(pm.freq && pm.freq > 0){
+            const intervalMonths = Math.round(12 / pm.freq);
+            const next = new Date(compDate);
+            next.setMonth(next.getMonth() + intervalMonths);
+            pm.nextPMS = next.toLocaleDateString('en-GB',
+              {day:'2-digit',month:'short',year:'numeric'}).replace(/ /g,'-');
+          }
+          // If an earlier 'overdue' flag was latched onto the row,
+          // clear it — we have a fresh completion in hand.
+          if(pm.status === 'overdue') pm.status = 'active';
+          await dbSavePM(pm);
+        }
+      } catch(rollErr){
+        console.warn('[pm-sync] schedule roll-forward failed (non-fatal):', rollErr);
+      }
     }
 
     invalidatePMCompletionsCache();
