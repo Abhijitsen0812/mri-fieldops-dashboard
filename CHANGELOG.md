@@ -7,6 +7,20 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.1] — 2026-04-25
+
+### Fixed
+- About tab now displays the correct v1.0.0 baseline release date (`24 April 2026`); previously showed a placeholder date (`18 April 2026`).
+
+### Changed
+- `window.APP_VERSION`, `window.APP_BUILD.tag`, and the in-bundle `APP_VERSION` constant bumped to `1.0.1`.
+- First end-to-end exercise of the `scripts/release.sh` release flow.
+
+### Notes
+- Same code as v1.0.0 plus the date-string fix. Safe drop-in upgrade; no behavioral change.
+
+---
+
 ## [1.0.0] — 2026-04-24
 
 **Baseline release.** First tagged, rollback-safe production build. Everything prior is folded into this line; future entries track changes from this point forward.

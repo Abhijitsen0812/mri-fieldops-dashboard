@@ -35,13 +35,14 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   red "Version '$VERSION' is not semver (X.Y.Z)."; exit 65
 fi
 
-# 2. on main, clean tree
+# 2. on main
+# (Working tree may have uncommitted version-bump edits — release.sh
+# is designed to run AFTER you bump VERSION/CHANGELOG/index.html and
+# BEFORE you commit. The version-match guards below verify those
+# bumps actually happened.)
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$BRANCH" != "main" ]]; then
   red "Must be on 'main' (currently on '$BRANCH')."; exit 1
-fi
-if ! git diff-index --quiet HEAD --; then
-  red "Working tree has uncommitted changes."; exit 1
 fi
 
 # 3. tag does not already exist

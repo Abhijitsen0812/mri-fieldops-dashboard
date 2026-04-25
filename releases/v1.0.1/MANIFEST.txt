@@ -1,0 +1,15 @@
+release:    v1.0.1
+date:       2026-04-25
+file:       index.html
+size_bytes: 447037
+sha256:     eb06b378bd0c369c11a1889a688aeb8386c85ae5b8662fa75ef5670231aae56b
+snapshotted_at_utc: 2026-04-25T07:33:00Z
+parent_commit:       44debace07954ee58630668439ee46e7c78ee2b9
+parent_commit_short: 44debac
+prod_url:    https://3imedtech.github.io/mri-fieldops-dashboard/
+staging_url: https://3imedtech.github.io/mri-fieldops-dashboard/staging/
+
+# After "git push origin main v1.0.1", verify prod by:
+#   curl -sI https://3imedtech.github.io/mri-fieldops-dashboard/index.html
+# In the browser console:
+#   window.APP_VERSION  // '1.0.1'
