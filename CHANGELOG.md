@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.2] — 2026-04-26
+
+### Fixed
+- **Dashboard KPI cards no longer falsely advertise clickability** (audit F-01). The base `.kpi-card` rule had `cursor: pointer` even though the dashboard's six top-row tiles (Total Service Calls, Incidents, PM Calls, Open Tickets, Data Flags, Install Base Covered) have no click handler. The base now uses `cursor: default`; clickable PM tiles still opt in with inline `cursor: pointer + onclick`; tooltip cards keep `cursor: help`.
+- **Install Base panel header now reads the live count** (audit F-12). Was hardcoded "🏥 Install Base — 22 Systems" and out of date (actual count is 25). Now driven by `CONFIG_ASSETS.length` via a `<span id="install-base-count">`; with a search active, shows `<filtered>/<total>`.
+- **Engineer Performance: REOPEN RATE placeholder tile removed** (audit F-14). The tile shipped the literal copy "v2 — not tracked yet" to end users. PM COMPLIANCE now spans the row. Will reinstate as a real metric once reopen tracking lands.
+- **`Loaded: …` console log deduped** (audit F-16). `loadAllFromDB()` was logging the identical line on every realtime reload — 4× per sign-in observed. Now logs only when one of the counts or the months list actually changes (fingerprinted via `window._lastLoadFingerprint`).
+- **Form controls inherit the body font** (audit D-02). Login submit / forgot-password / recovery buttons rendered in Arial because UA defaults override the body font on form controls. Added a global `button, input, select, textarea { font-family: inherit; }` reset.
+
+### Notes
+- All five fixes are view-layer / display-only. No auth, RLS, write paths, or data flow touched. Bundle grows 1,749 bytes (mostly comments referencing audit IDs).
+- Companion document: `docs/STAGING_AUDIT_2026-04-26.md` — staging audit covering all 11 pages × 3 roles, with a phase-wise improvement roadmap. Phase 0 = this release.
+- Four audit findings (F-03, F-05, F-08, F-11) were re-verified against code and reclassified as false positives — caused by my browser audit's use of `textContent` (which strips display:none and block-level breaks) and stale modal contamination between test steps. Documented in the Phase 0 commit message.
+
+---
+
 ## [1.0.1] — 2026-04-25
 
 ### Fixed
