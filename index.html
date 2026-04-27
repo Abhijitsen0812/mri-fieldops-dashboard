@@ -1143,19 +1143,47 @@ window.APP_BUILD   = { version: '1.0.2', released: '2026-04-26', tag: 'v1.0.2' }
 // LUCIDE ICON RENDER HOOK (v1.1.0 1a)
 // ══════════════════════════════════════════
 // Lucide replaces every <i data-lucide="name"> element with an inline <svg>.
-// Anywhere we re-render HTML that may contain <i data-lucide=…>, call
-// window.refreshIcons() to swap them. Safe to call multiple times — already-
-// replaced elements are skipped. Tolerant of Lucide failing to load (e.g.
-// CDN blocked) so the rest of the app still works.
-window.refreshIcons = function refreshIcons(root){
+// We expose two paths:
+//   • window.refreshIcons() — manual sweep (used by renderAll + DOMContentLoaded)
+//   • a MutationObserver — auto-sweeps after any DOM mutation that adds icon
+//     placeholders, so individual render*() functions don't have to know.
+// Both are safe to run multiple times (already-replaced elements are skipped)
+// and tolerant of Lucide failing to load (icons are decorative).
+window.refreshIcons = function refreshIcons(){
   try {
     if (typeof window.lucide === 'undefined' || !window.lucide.createIcons) return;
-    window.lucide.createIcons({
-      attrs: { class: 'lucide-icon', 'aria-hidden': 'true' },
-      ...(root ? { nameAttr: 'data-lucide', icons: undefined } : {}),
-    });
-  } catch (e) { /* ignore — icons are decorative */ }
+    window.lucide.createIcons({ attrs: { class: 'lucide-icon', 'aria-hidden': 'true' } });
+  } catch (e) { /* ignore */ }
 };
+
+(function installIconObserver(){
+  if (typeof MutationObserver === 'undefined') return;
+  let scheduled = false;
+  function schedule(){
+    if (scheduled) return;
+    scheduled = true;
+    // requestAnimationFrame so we batch into a single sweep per paint, even
+    // if multiple render functions mutate within the same tick.
+    requestAnimationFrame(() => { scheduled = false; window.refreshIcons(); });
+  }
+  function hasIconPlaceholder(node){
+    if (!(node instanceof Element)) return false;
+    if (node.matches && node.matches('i[data-lucide]')) return true;
+    return !!(node.querySelector && node.querySelector('i[data-lucide]'));
+  }
+  const obs = new MutationObserver(records => {
+    for (const r of records) {
+      for (const n of r.addedNodes) {
+        if (hasIconPlaceholder(n)) { schedule(); return; }
+      }
+    }
+  });
+  // Start observing as soon as <body> exists.
+  function start(){ if (document.body) obs.observe(document.body, { childList: true, subtree: true }); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else { start(); }
+})();
 
 // ══════════════════════════════════════════
 // MASTER DATA — 143 tickets from Excel
