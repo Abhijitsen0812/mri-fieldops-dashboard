@@ -78,6 +78,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
    submit / forgot reset buttons render in Arial while the rest of the UI
    uses Inter. (audit D-02) */
 button,input,select,textarea{font-family:inherit;}
+/* Skip link (v1.1.0 1b a11y): visually hidden until focused via keyboard,
+   then snaps into the upper-left corner. Skipping past the 11-item sidebar
+   on every page load is a keyboard-user requirement (WCAG 2.4.1). */
+.skip-link{position:absolute;left:-10000px;top:8px;z-index:10000;background:var(--brand);color:#fff;padding:10px 16px;border-radius:var(--radius-md);font-weight:600;text-decoration:none;font-size:var(--text-sm);}
+.skip-link:focus{left:8px;outline:none;box-shadow:var(--focus-ring);}
+/* Visually hidden but readable by screen readers (v1.1.0 1b a11y). Used by
+   the aria-live regions, plus any element that needs an accessible name
+   without on-screen text. */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:224px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:100;}
 .logo{padding:18px 18px 14px;border-bottom:1px solid var(--border);}
 .logo-mark{display:flex;align-items:center;gap:10px;}
@@ -90,7 +99,8 @@ button,input,select,textarea{font-family:inherit;}
    sentence-case ("Operations"). Keeps the typographic separator but reads
    less shouty / more enterprise. */
 .nav-section{font-family:var(--sans);font-size:var(--text-xs);color:var(--text-faint);letter-spacing:.2px;font-weight:600;padding:10px 10px 6px;margin-top:8px;text-transform:none;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:8px;cursor:pointer;color:var(--text-dim);font-size:13px;font-weight:500;transition:background .18s,color .18s,transform .18s,border-color .18s;margin-bottom:2px;border:1px solid transparent;user-select:none;position:relative;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:var(--radius-lg);cursor:pointer;color:var(--text-dim);font-size:13px;font-weight:500;transition:background .18s,color .18s,transform .18s,border-color .18s,box-shadow .18s;margin-bottom:2px;border:1px solid transparent;user-select:none;position:relative;}
+.nav-item:focus-visible{outline:none;box-shadow:var(--focus-ring);}
 .nav-item::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,var(--brand),var(--accent));transform:scaleY(0);transform-origin:center;transition:transform .25s cubic-bezier(.2,.7,.2,1);}
 .nav-item:hover{background:var(--surface2);color:var(--text);transform:translateX(1px);}
 .nav-item.active{background:rgba(59,130,246,.13);color:var(--brand);border-color:rgba(59,130,246,.22);}
@@ -195,7 +205,11 @@ button,input,select,textarea{font-family:inherit;}
 .kpi-delta.warn{color:var(--amber);}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;}
 .panel-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-.panel-title{font-family:var(--sans);font-weight:600;font-size:var(--text-base);flex:1;display:inline-flex;align-items:center;gap:var(--space-2);}
+/* h2.panel-title (v1.1.0 1b a11y): heading hierarchy promotion. The * reset
+   at the top of the stylesheet zeroes margin/padding so h2 renders inline
+   alongside other panel-head children. line-height tightened so the h2 sits
+   on the same baseline as the previous div. */
+.panel-title{font-family:var(--sans);font-weight:600;font-size:var(--text-base);flex:1;display:inline-flex;align-items:center;gap:var(--space-2);line-height:1.3;}
 .panel-title svg{width:16px;height:16px;stroke-width:2;color:var(--text-dim);flex-shrink:0;}
 .panel-action{font-size:11px;color:var(--brand);cursor:pointer;font-weight:600;}
 .panel-body{padding:16px 18px;}
@@ -593,6 +607,17 @@ button,input,select,textarea{font-family:inherit;}
 </head>
 <body>
 
+<!-- Skip link (v1.1.0 1b a11y) — first focusable element on the page so a
+     keyboard user can jump past the sidebar nav on every page load. -->
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- Live region (v1.1.0 1b a11y) — screen-reader-only announcements for
+     toasts, search-result counts, sign-in errors, and realtime sync events.
+     Set window.announce(message) to publish; the message is cleared after
+     announcing so the same string can be re-announced if it repeats. -->
+<div id="aria-live-polite" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+<div id="aria-live-assertive" class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
 <!-- LOGIN OVERLAY (shown until authenticated) -->
 <div id="login-overlay" class="login-overlay" style="display:none">
   <div class="login-card">
@@ -601,8 +626,8 @@ button,input,select,textarea{font-family:inherit;}
 
     <!-- Sign-in form -->
     <form id="login-form" autocomplete="on">
-      <input type="email" id="login-email" placeholder="Email" required autocomplete="username">
-      <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
+      <input type="email" id="login-email" placeholder="Email" aria-label="Email" required autocomplete="username">
+      <input type="password" id="login-password" placeholder="Password" aria-label="Password" required autocomplete="current-password">
       <button type="submit" id="login-submit">Sign in</button>
       <div id="login-error" class="login-error"></div>
       <div style="margin-top:10px;text-align:right">
@@ -613,7 +638,7 @@ button,input,select,textarea{font-family:inherit;}
     <!-- Forgot-password form (hidden until 'Forgot password?' is clicked) -->
     <form id="forgot-form" autocomplete="on" style="display:none">
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Enter your email and we'll send a reset link.</div>
-      <input type="email" id="forgot-email" placeholder="Email" required autocomplete="username">
+      <input type="email" id="forgot-email" placeholder="Email" aria-label="Recovery email" required autocomplete="username">
       <button type="submit" id="forgot-submit">Send reset link</button>
       <div id="forgot-msg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
       <div style="margin-top:10px;text-align:right">
@@ -625,8 +650,8 @@ button,input,select,textarea{font-family:inherit;}
     <form id="recovery-form" autocomplete="on" style="display:none">
       <div style="font-size:13px;color:var(--text);margin-bottom:4px;font-weight:600">Set a new password</div>
       <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Minimum 10 characters. Mix letters, numbers, and symbols.</div>
-      <input type="password" id="recovery-pw1" placeholder="New password" required autocomplete="new-password" minlength="10">
-      <input type="password" id="recovery-pw2" placeholder="Confirm new password" required autocomplete="new-password" minlength="10">
+      <input type="password" id="recovery-pw1" placeholder="New password" aria-label="New password" required autocomplete="new-password" minlength="10">
+      <input type="password" id="recovery-pw2" placeholder="Confirm new password" aria-label="Confirm new password" required autocomplete="new-password" minlength="10">
       <button type="submit" id="recovery-submit">Update password</button>
       <div id="recovery-msg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
     </form>
@@ -650,21 +675,21 @@ button,input,select,textarea{font-family:inherit;}
       <div><div class="logo-text">FieldOps</div><div class="logo-sub">3i MEDTECH · MEDICAL IMAGING</div></div>
     </div>
   </div>
-  <nav class="nav">
-    <div class="nav-section">Operations</div>
-    <div class="nav-item active" data-page="dashboard"><span class="nav-icon"><i data-lucide="layout-dashboard"></i></span> Dashboard</div>
-    <div class="nav-item" data-page="tickets"><span class="nav-icon"><i data-lucide="ticket"></i></span> Service History <span class="nav-badge blue" id="nb-total" style="display:none"></span></div>
-    <div class="nav-item" data-page="open"><span class="nav-icon"><i data-lucide="alert-circle"></i></span> Open Tickets <span class="nav-badge" id="nb-open" style="display:none"></span></div>
-    <div class="nav-item" data-page="pm"><span class="nav-icon"><i data-lucide="calendar-clock"></i></span> PM Schedules <span class="nav-badge amber" id="nb-pm" style="display:none"></span></div>
-    <div class="nav-section">Assets &amp; team</div>
-    <div class="nav-item" data-page="assets"><span class="nav-icon"><i data-lucide="building-2"></i></span> Install Base</div>
-    <div class="nav-item" data-page="team"><span class="nav-icon"><i data-lucide="users"></i></span> Field Team <span class="nav-badge green" id="nb-team" style="display:none"></span></div>
-    <div class="nav-section">Analysis</div>
-    <div class="nav-item admin-only" data-page="ambiguities"><span class="nav-icon"><i data-lucide="alert-triangle"></i></span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb" style="display:none"></span></div>
-    <div class="nav-item mgr-plus" data-page="engperf"><span class="nav-icon"><i data-lucide="award"></i></span> Engineer Performance</div>
-    <div class="nav-item" data-page="reports"><span class="nav-icon"><i data-lucide="bar-chart-3"></i></span> Reports</div>
-    <div class="nav-item superadmin-only" data-page="auditlog"><span class="nav-icon"><i data-lucide="shield"></i></span> Audit Log</div>
-    <div class="nav-item" data-page="about"><span class="nav-icon"><i data-lucide="info"></i></span> About</div>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-section" role="presentation">Operations</div>
+    <div class="nav-item active" data-page="dashboard" role="button" tabindex="0" aria-current="page"><span class="nav-icon"><i data-lucide="layout-dashboard"></i></span> Dashboard</div>
+    <div class="nav-item" data-page="tickets" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="ticket"></i></span> Service History <span class="nav-badge blue" id="nb-total" style="display:none"></span></div>
+    <div class="nav-item" data-page="open" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="alert-circle"></i></span> Open Tickets <span class="nav-badge" id="nb-open" style="display:none"></span></div>
+    <div class="nav-item" data-page="pm" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="calendar-clock"></i></span> PM Schedules <span class="nav-badge amber" id="nb-pm" style="display:none"></span></div>
+    <div class="nav-section" role="presentation">Assets &amp; team</div>
+    <div class="nav-item" data-page="assets" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="building-2"></i></span> Install Base</div>
+    <div class="nav-item" data-page="team" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="users"></i></span> Field Team <span class="nav-badge green" id="nb-team" style="display:none"></span></div>
+    <div class="nav-section" role="presentation">Analysis</div>
+    <div class="nav-item admin-only" data-page="ambiguities" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="alert-triangle"></i></span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb" style="display:none"></span></div>
+    <div class="nav-item mgr-plus" data-page="engperf" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="award"></i></span> Engineer Performance</div>
+    <div class="nav-item" data-page="reports" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="bar-chart-3"></i></span> Reports</div>
+    <div class="nav-item superadmin-only" data-page="auditlog" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="shield"></i></span> Audit Log</div>
+    <div class="nav-item" data-page="about" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="info"></i></span> About</div>
   </nav>
   <div class="sidebar-footer">
     <div class="user-card">
@@ -681,7 +706,7 @@ button,input,select,textarea{font-family:inherit;}
   <div class="topbar-title" id="topbar-title">Dashboard</div>
   <div id="env-pill" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;background:#f59e0b;color:#000;box-shadow:0 0 0 1px #b45309 inset" title="You are on the STAGING environment. Data here is isolated from production.">STAGING</div>
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
-  <input type="file" id="xlsx-upload" accept=".xlsx" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
+  <input type="file" id="xlsx-upload" accept=".xlsx" aria-label="Upload service operations XLSX file" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
   <button class="btn btn-ghost admin-only" style="font-size:11px;padding:6px 12px" onclick="document.getElementById('xlsx-upload').click()" title="Upload service operations Excel file"><i data-lucide="upload"></i>Upload XLSX</button>
   <button class="btn btn-ghost" id="reset-data-btn" style="font-size:11px;padding:6px 12px" onclick="resetToBundledData()" title="Refresh data from database"><i data-lucide="rotate-cw"></i>Refresh</button>
   <div class="clock" id="clock">—</div>
@@ -695,7 +720,7 @@ button,input,select,textarea{font-family:inherit;}
   </div>
 </header>
 
-<main class="main"><div class="content">
+<main class="main" id="main"><div class="content">
 <div class="print-header" id="print-header">
   <h1 id="print-header-title">MRI FieldOps Dashboard</h1>
   <div class="meta" id="print-header-meta">3i MEDTECH · Medical Imaging</div>
@@ -715,7 +740,7 @@ button,input,select,textarea{font-family:inherit;}
   <div class="grid-2 g-3-1">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-title"><i data-lucide="alert-circle"></i>Currently Open Tickets</div>
+        <h2 class="panel-title"><i data-lucide="alert-circle"></i>Currently Open Tickets</h2>
         <div class="panel-action" onclick="navigate('open')">View All →</div>
       </div>
       <div style="overflow-x:auto">
@@ -726,14 +751,14 @@ button,input,select,textarea{font-family:inherit;}
       </div>
     </div>
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="users"></i>Field Team</div><div class="panel-action" onclick="navigate('team')">All →</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="users"></i>Field Team</h2><div class="panel-action" onclick="navigate('team')">All →</div></div>
       <div class="panel-body"><div class="eng-list" id="dash-eng-list"></div></div>
     </div>
   </div>
 
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="calendar-range"></i>Upcoming Contract Renewals</div>
+      <h2 class="panel-title"><i data-lucide="calendar-range"></i>Upcoming Contract Renewals</h2>
       <div class="panel-action" onclick="navigate('pm')">PM Schedule →</div>
     </div>
     <div class="panel-body"><div id="renewals-panel"></div></div>
@@ -741,21 +766,21 @@ button,input,select,textarea{font-family:inherit;}
 
   <div class="grid-2 g-1-1-1" style="grid-template-columns:1fr 1fr 1fr">
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="bar-chart-3"></i>Calls by Month</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="bar-chart-3"></i>Calls by Month</h2></div>
       <div class="panel-body"><div class="bar-chart-wrap" id="bar-monthly"></div></div>
     </div>
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="pie-chart"></i>Call Type Breakdown</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="pie-chart"></i>Call Type Breakdown</h2></div>
       <div class="panel-body" id="call-type-chart"></div>
     </div>
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="trophy"></i>Top 5 Customers by Calls</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="trophy"></i>Top 5 Customers by Calls</h2></div>
       <div class="panel-body"><div class="bar-chart-wrap" id="bar-customers"></div></div>
     </div>
   </div>
 
   <div class="panel">
-    <div class="panel-head"><div class="panel-title" id="kpi-band-title"><i data-lucide="gauge"></i>Live KPIs</div></div>
+    <div class="panel-head"><h2 class="panel-title" id="kpi-band-title"><i data-lucide="gauge"></i>Live KPIs</h2></div>
     <div class="panel-body"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:20px;text-align:center" id="kpi-band"></div></div>
   </div>
 </div>
@@ -764,9 +789,9 @@ button,input,select,textarea{font-family:inherit;}
 <div class="page" id="page-tickets">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title" id="history-panel-title"><i data-lucide="clipboard-list"></i>Full Service History</div>
+      <h2 class="panel-title" id="history-panel-title"><i data-lucide="clipboard-list"></i>Full Service History</h2>
       <div style="display:flex;gap:8px;align-items:center">
-        <input class="search-box" placeholder="Search customer, issue, engineer, parts…" oninput="filterHistory(this.value)" id="history-search">
+        <input class="search-box" placeholder="Search customer, issue, engineer, parts…" aria-label="Search service history" oninput="filterHistory(this.value)" id="history-search">
         <button class="btn btn-ghost export-btn" style="font-size:11px;padding:5px 10px" onclick="exportHistoryCSV()" title="Export filtered rows to CSV"><i data-lucide="download"></i>CSV</button>
         <button class="btn btn-ghost export-btn" style="font-size:11px;padding:5px 10px" onclick="printCurrentPage('Service History')" title="Print / Save as PDF"><i data-lucide="printer"></i>PDF</button>
       </div>
@@ -793,7 +818,7 @@ button,input,select,textarea{font-family:inherit;}
 <!-- ██ OPEN TICKETS ██ -->
 <div class="page" id="page-open">
   <div class="panel">
-    <div class="panel-head"><div class="panel-title" id="open-panel-title"><i data-lucide="alert-circle"></i>Open Tickets</div></div>
+    <div class="panel-head"><h2 class="panel-title" id="open-panel-title"><i data-lucide="alert-circle"></i>Open Tickets</h2></div>
     <div style="overflow-x:auto">
       <table class="data-table">
         <thead><tr>
@@ -815,7 +840,7 @@ button,input,select,textarea{font-family:inherit;}
   <!-- PM Master Schedule -->
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="calendar-clock"></i>PM Master Schedule — <span id="pm-count-label">22</span> Machines</div>
+      <h2 class="panel-title"><i data-lucide="calendar-clock"></i>PM Master Schedule — <span id="pm-count-label">22</span> Machines</h2>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px" onclick="pmFilterStatus='all';renderPM()">All</button>
         <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;color:var(--red)" onclick="pmFilterStatus='overdue';renderPM()">Overdue</button>
@@ -837,14 +862,14 @@ button,input,select,textarea{font-family:inherit;}
 
   <!-- PM Timeline (visual calendar) -->
   <div class="panel">
-    <div class="panel-head"><div class="panel-title"><i data-lucide="bar-chart-3"></i>PM Timeline — Next 6 Months</div></div>
+    <div class="panel-head"><h2 class="panel-title"><i data-lucide="bar-chart-3"></i>PM Timeline — Next 6 Months</h2></div>
     <div class="panel-body" id="pm-timeline" style="overflow-x:auto"></div>
   </div>
 
   <!-- PM Email Reminders -->
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="mail"></i>PM Reminders Due This Week</div>
+      <h2 class="panel-title"><i data-lucide="mail"></i>PM Reminders Due This Week</h2>
       <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)" id="pm-reminder-count"></div>
     </div>
     <div class="panel-body" id="pm-reminders"></div>
@@ -853,7 +878,7 @@ button,input,select,textarea{font-family:inherit;}
   <!-- PM Calls from Service Log -->
   <div class="panel">
     <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-      <div class="panel-title"><i data-lucide="calendar-check"></i>PM Calls from Service Log</div>
+      <h2 class="panel-title"><i data-lucide="calendar-check"></i>PM Calls from Service Log</h2>
       <button class="btn btn-ghost admin-only" id="pm-sync-btn" style="font-size:10px;padding:5px 12px" onclick="runPMSyncManual()" title="Create pm_completions rows from PMS tickets so engineer compliance tiles credit this work"><i data-lucide="refresh-cw"></i>Sync to PM Compliance</button>
     </div>
     <div style="overflow-x:auto">
@@ -869,8 +894,8 @@ button,input,select,textarea{font-family:inherit;}
 <div class="page" id="page-assets">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="building-2"></i>Install Base — <span id="install-base-count">—</span> Systems</div>
-      <input class="search-box" placeholder="Search customer, town, model…" oninput="filterAssets(this.value)">
+      <h2 class="panel-title"><i data-lucide="building-2"></i>Install Base — <span id="install-base-count">—</span> Systems</h2>
+      <input class="search-box" placeholder="Search customer, town, model…" aria-label="Search install base" oninput="filterAssets(this.value)">
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
@@ -894,17 +919,17 @@ button,input,select,textarea{font-family:inherit;}
   <div class="grid-2 g-1-1" style="margin-bottom:16px">
     <div class="panel" style="margin-bottom:0">
       <div class="panel-head">
-        <div class="panel-title"><i data-lucide="users"></i>Engineers — Master List</div>
+        <h2 class="panel-title"><i data-lucide="users"></i>Engineers — Master List</h2>
         <button class="btn btn-ghost admin-only" style="font-size:10px;padding:4px 10px" onclick="toggleAddEngineerForm()">+ Add</button>
         <button class="btn btn-ghost admin-only" style="font-size:10px;padding:4px 10px;margin-left:6px" onclick="resetRoster()" title="Reset roster to original list"><i data-lucide="rotate-ccw"></i>Reset</button>
       </div>
       <div id="add-eng-form" class="admin-only" style="display:none;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
         <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:10px">ADD ENGINEER</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <input class="search-box" id="new-eng-name" placeholder="Full name (e.g. Rajesh Kumar)" style="padding:6px 10px">
-          <input class="search-box" id="new-eng-region" placeholder="Region (e.g. Chennai)" style="padding:6px 10px">
-          <input class="search-box" id="new-eng-email" placeholder="Email" style="padding:6px 10px">
-          <input class="search-box" id="new-eng-aliases" placeholder="Aliases, comma-separated (optional)" style="padding:6px 10px">
+          <input class="search-box" id="new-eng-name" placeholder="Full name (e.g. Rajesh Kumar)" aria-label="Engineer full name" style="padding:6px 10px">
+          <input class="search-box" id="new-eng-region" placeholder="Region (e.g. Chennai)" aria-label="Engineer region" style="padding:6px 10px">
+          <input class="search-box" id="new-eng-email" placeholder="Email" aria-label="Engineer email" style="padding:6px 10px">
+          <input class="search-box" id="new-eng-aliases" placeholder="Aliases, comma-separated (optional)" aria-label="Engineer aliases" style="padding:6px 10px">
         </div>
         <div style="font-size:10px;color:var(--text-faint);margin-bottom:10px">Aliases help match the name to how it's written in ticket logs (e.g. "Rajesh", "Raj K"). Leave blank if full name is used consistently.</div>
         <div style="display:flex;gap:8px">
@@ -915,7 +940,7 @@ button,input,select,textarea{font-family:inherit;}
       <div class="panel-body"><div class="eng-list" id="team-eng-list"></div></div>
     </div>
     <div class="panel" style="margin-bottom:0">
-      <div class="panel-head"><div class="panel-title" id="calls-per-eng-title"><i data-lucide="bar-chart-3"></i>Calls per Engineer</div></div>
+      <div class="panel-head"><h2 class="panel-title" id="calls-per-eng-title"><i data-lucide="bar-chart-3"></i>Calls per Engineer</h2></div>
       <div class="panel-body"><div class="bar-chart-wrap" id="bar-eng" style="height:220px"></div></div>
     </div>
   </div>
@@ -924,7 +949,7 @@ button,input,select,textarea{font-family:inherit;}
 <!-- ██ FLAGS & AMBIGUITIES ██ -->
 <div class="page" id="page-ambiguities">
   <div class="panel">
-    <div class="panel-head"><div class="panel-title"><i data-lucide="alert-triangle"></i>Data Flags &amp; Ambiguities — Requiring Your Review</div></div>
+    <div class="panel-head"><h2 class="panel-title"><i data-lucide="alert-triangle"></i>Data Flags &amp; Ambiguities — Requiring Your Review</h2></div>
     <div class="panel-body">
       <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">
         The following 16 records were flagged during ingestion. <strong style="color:var(--text)">Please review each and confirm the correct interpretation.</strong> Records are imported as-is with their flags shown. Where you confirm the correct status, these can be updated.
@@ -942,16 +967,16 @@ button,input,select,textarea{font-family:inherit;}
   </div>
   <div class="grid-2 g-1-1">
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</h2></div>
       <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
     </div>
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</div></div>
+      <div class="panel-head"><h2 class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</h2></div>
       <div class="panel-body"><div class="bar-chart-wrap" id="bar-parts" style="height:180px"></div></div>
     </div>
   </div>
   <div class="panel">
-    <div class="panel-head"><div class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</div></div>
+    <div class="panel-head"><h2 class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</h2></div>
     <div style="overflow-x:auto">
       <table class="data-table">
         <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
@@ -966,10 +991,10 @@ button,input,select,textarea{font-family:inherit;}
 <div class="page" id="page-engperf">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="award"></i>Engineer Performance — <span id="ep-engineer-count">0</span> Engineers</div>
+      <h2 class="panel-title"><i data-lucide="award"></i>Engineer Performance — <span id="ep-engineer-count">0</span> Engineers</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:1px">WINDOW:</span>
-        <select id="ep-window" onchange="renderEngineerPerformance()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+        <select id="ep-window" aria-label="Engineer performance time window" onchange="renderEngineerPerformance()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
           <option value="30">Last 30 days</option>
           <option value="90" selected>Last 90 days</option>
           <option value="180">Last 6 months</option>
@@ -978,7 +1003,7 @@ button,input,select,textarea{font-family:inherit;}
           <option value="all">All time</option>
         </select>
         <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:1px">REGION:</span>
-        <select id="ep-region" onchange="renderEngineerPerformance()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+        <select id="ep-region" aria-label="Engineer performance region filter" onchange="renderEngineerPerformance()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
           <option value="all">All regions</option>
         </select>
       </div>
@@ -989,8 +1014,8 @@ button,input,select,textarea{font-family:inherit;}
 </div>
 
 <!-- ENGINEER DRILL-DOWN MODAL -->
-<div class="modal-overlay" id="ep-detail-modal">
-  <div class="modal" style="max-width:820px">
+<div class="modal-overlay" id="ep-detail-modal" role="dialog" aria-modal="true" aria-labelledby="ep-detail-title" aria-hidden="true">
+  <div class="modal" style="max-width:820px" tabindex="-1">
     <div class="modal-head">
       <div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--brand);margin-bottom:3px">ENGINEER PERFORMANCE</div>
@@ -1006,9 +1031,9 @@ button,input,select,textarea{font-family:inherit;}
 <div class="page" id="page-auditlog">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title" id="audit-panel-title"><i data-lucide="shield"></i>Audit Log</div>
+      <h2 class="panel-title" id="audit-panel-title"><i data-lucide="shield"></i>Audit Log</h2>
       <div style="display:flex;gap:8px;align-items:center">
-        <select id="audit-filter-action" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+        <select id="audit-filter-action" aria-label="Filter audit log by action type" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
           <option value="all">All actions</option>
           <option value="login">Login</option>
           <option value="logout">Logout</option>
@@ -1018,7 +1043,7 @@ button,input,select,textarea{font-family:inherit;}
           <option value="restricted_access_attempt">Restricted access</option>
           <option value="navigate">Navigate</option>
         </select>
-        <select id="audit-filter-user" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
+        <select id="audit-filter-user" aria-label="Filter audit log by user" onchange="renderAuditLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
           <option value="all">All users</option>
         </select>
         <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="reloadAuditLog()"><i data-lucide="rotate-cw"></i>Refresh</button>
@@ -1039,7 +1064,7 @@ button,input,select,textarea{font-family:inherit;}
 <div class="page" id="page-about">
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title"><i data-lucide="info"></i>About MRI FieldOps Dashboard</div>
+      <h2 class="panel-title"><i data-lucide="info"></i>About MRI FieldOps Dashboard</h2>
     </div>
     <div style="padding:22px 26px;display:grid;gap:22px;max-width:880px">
       <div style="display:flex;align-items:center;gap:16px">
@@ -1068,8 +1093,8 @@ button,input,select,textarea{font-family:inherit;}
 </div></main>
 
 <!-- DETAIL MODAL -->
-<div class="modal-overlay" id="detail-modal">
-  <div class="modal">
+<div class="modal-overlay" id="detail-modal" role="dialog" aria-modal="true" aria-labelledby="dm-title" aria-hidden="true">
+  <div class="modal" tabindex="-1">
     <div class="modal-head">
       <div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:3px" id="dm-id">—</div>
@@ -1083,12 +1108,12 @@ button,input,select,textarea{font-family:inherit;}
 </div>
 
 <!-- PM COMPLETION MODAL -->
-<div class="modal-overlay" id="pm-complete-modal">
-  <div class="modal" style="max-width:520px">
+<div class="modal-overlay" id="pm-complete-modal" role="dialog" aria-modal="true" aria-labelledby="pm-complete-title" aria-hidden="true">
+  <div class="modal" style="max-width:520px" tabindex="-1">
     <div class="modal-head">
       <div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-bottom:3px">PM COMPLETION</div>
-        <div style="font-family:var(--display);font-weight:700;font-size:15px">Record Preventive Maintenance</div>
+        <div id="pm-complete-title" style="font-family:var(--display);font-weight:700;font-size:15px">Record Preventive Maintenance</div>
         <div style="font-size:11px;color:var(--text-dim);margin-top:4px" id="pm-complete-context">—</div>
       </div>
       <button class="modal-close" type="button" aria-label="Close" onclick="closeModal('pm-complete-modal')"><i data-lucide="x"></i></button>
@@ -1096,7 +1121,7 @@ button,input,select,textarea{font-family:inherit;}
     <div class="modal-body">
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Completion Date *</label>
-        <input type="date" id="pm-complete-date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:12px;max-width:220px">
+        <input type="date" id="pm-complete-date" aria-label="PM completion date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:12px;max-width:220px">
       </div>
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Engineers Performed *</label>
@@ -1105,7 +1130,7 @@ button,input,select,textarea{font-family:inherit;}
       </div>
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:5px;letter-spacing:1px;text-transform:uppercase">Remarks / Observations</label>
-        <textarea id="pm-complete-remarks" rows="4" placeholder="Parts replaced, calibration values, issues noted, follow-up items..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);resize:vertical;font-family:inherit;font-size:12px;line-height:1.5"></textarea>
+        <textarea id="pm-complete-remarks" rows="4" aria-label="PM completion remarks" placeholder="Parts replaced, calibration values, issues noted, follow-up items..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);resize:vertical;font-family:inherit;font-size:12px;line-height:1.5"></textarea>
       </div>
       <div id="pm-complete-preview" style="background:var(--surface2);border:1px dashed var(--border);border-radius:6px;padding:10px 12px;font-size:11px;color:var(--text-dim);margin-bottom:16px">
         Next PM will be computed from the completion date and frequency.
@@ -1119,8 +1144,8 @@ button,input,select,textarea{font-family:inherit;}
 </div>
 
 <!-- UPLOAD PREVIEW MODAL -->
-<div class="modal-overlay" id="upload-modal">
-  <div class="modal" style="max-width:720px">
+<div class="modal-overlay" id="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-modal-title" aria-hidden="true">
+  <div class="modal" style="max-width:720px" tabindex="-1">
     <div class="modal-head">
       <div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--accent);margin-bottom:3px">XLSX UPLOAD PREVIEW</div>
@@ -1154,6 +1179,24 @@ window.refreshIcons = function refreshIcons(){
     if (typeof window.lucide === 'undefined' || !window.lucide.createIcons) return;
     window.lucide.createIcons({ attrs: { class: 'lucide-icon', 'aria-hidden': 'true' } });
   } catch (e) { /* ignore */ }
+};
+
+// ══════════════════════════════════════════
+// SCREEN-READER ANNOUNCEMENTS (v1.1.0 1b a11y)
+// ══════════════════════════════════════════
+// Two live regions in the static HTML; this helper writes to the right one
+// based on the priority arg. Polite is default; assertive interrupts the
+// screen reader (use sparingly — sign-in errors, destructive confirmations).
+// Empty-then-set pattern triggers re-announcement when the same string is
+// emitted twice in a row (the live-region only announces on text change).
+window.announce = function announce(message, priority){
+  if(!message) return;
+  const id = priority === 'assertive' ? 'aria-live-assertive' : 'aria-live-polite';
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = '';
+  // microtask gap forces SR to detect the new text as a change
+  queueMicrotask(() => { el.textContent = String(message); });
 };
 
 (function installIconObserver(){
@@ -2126,7 +2169,7 @@ function showUploadPreview(result, fileName){
       <button class="btn btn-primary" style="font-size:12px;padding:7px 18px" onclick="applyUploadedData()">Apply Changes →</button>
     </div>
   `;
-  document.getElementById('upload-modal').classList.add('open');
+  openModal('upload-modal');
 }
 
 // Scan a set of just-uploaded tickets for data-quality issues and turn each
@@ -2965,9 +3008,9 @@ function navigate(page){
   // Verify the class is really there — defends against external DOM edits
   // that could leave the cache out of sync with what the user sees.
   if(_activePage && _activePage.id === `page-${page}` && _activePage.classList.contains('active')) return;
-  if(_activeNavItem) _activeNavItem.classList.remove('active');
+  if(_activeNavItem){ _activeNavItem.classList.remove('active'); _activeNavItem.removeAttribute('aria-current'); }
   const nextNav = document.querySelector(`.nav-item[data-page="${page}"]`);
-  if(nextNav){ nextNav.classList.add('active'); _activeNavItem = nextNav; }
+  if(nextNav){ nextNav.classList.add('active'); nextNav.setAttribute('aria-current', 'page'); _activeNavItem = nextNav; }
   else { _activeNavItem = null; }
   if(_activePage) _activePage.classList.remove('active');
   const nextPage = document.getElementById(`page-${page}`);
@@ -2981,7 +3024,15 @@ function navigate(page){
   logAudit('navigate', {page});
 }
 document.querySelectorAll('.nav-item[data-page]').forEach(item=>{
-  item.addEventListener('click',()=>{ navigate(item.dataset.page); closeSidebar(); });
+  const go = () => { navigate(item.dataset.page); closeSidebar(); };
+  item.addEventListener('click', go);
+  // v1.1.0 1b a11y: nav-items act as role="button"; wire Enter+Space.
+  item.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      go();
+    }
+  });
 });
 
 // ── Responsive sidebar (mobile hamburger) ──────────────────────────
@@ -3945,7 +3996,7 @@ function openPMCompleteModal(pmId){
   document.getElementById('pm-complete-submit').disabled = false;
   updatePMCompletePreview();
 
-  document.getElementById('pm-complete-modal').classList.add('open');
+  openModal('pm-complete-modal');
 }
 
 // Recomputes the "next PM will be..." preview whenever the date changes.
@@ -5233,7 +5284,7 @@ function openEngineerDetail(engId, metricKey){
   document.getElementById('ep-detail-body').innerHTML = header + `
     <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:6px">${esc(plan.title.toUpperCase())} ${cappedNote}</div>
     <div style="overflow:auto;max-height:48vh;border:1px solid var(--border);border-radius:8px">${tableHtml}</div>`;
-  document.getElementById('ep-detail-modal').classList.add('open');
+  openModal('ep-detail-modal');
 }
 
 function renderAmbiguities(){
@@ -5490,11 +5541,103 @@ function openDetail(id){
       <div class="detail-field full"><label>Issue Description</label><div class="resolution-box">${t.issue||'—'}</div></div>
       <div class="detail-field full"><label>Resolution Steps</label><div class="resolution-box">${t.resolution||'No resolution recorded'}</div></div>
     </div>`;
-  document.getElementById('detail-modal').classList.add('open');
+  openModal('detail-modal');
 }
-function closeModal(id){document.getElementById(id).classList.remove('open');}
-document.querySelectorAll('.modal-overlay').forEach(m=>{
-  m.addEventListener('click',e=>{if(e.target===m) m.classList.remove('open');});
+// ══════════════════════════════════════════════════════════════════════
+// MODAL ACCESSIBILITY (v1.1.0 1b)
+// ══════════════════════════════════════════════════════════════════════
+// Single set of helpers for show/hide so every modal gets:
+//   • role="dialog" + aria-modal=true (added in static HTML / by these helpers)
+//   • Focus moved into the modal on open, with restore-to-opener on close
+//   • Escape closes the topmost open modal
+//   • Tab cycles within the modal (focus trap)
+//   • Backdrop click closes (preserves existing behavior)
+// Calls to closeModal(id) work the same as before for callers; openModal(id)
+// is the new opener that the modal-trigger functions should use instead of
+// classList.add('open') directly. Existing direct .classList.add('open')
+// callers fall through to the MutationObserver below which catches them.
+// ─────────────────────────────────────────────────────────────────────
+
+const _MODAL_FOCUSABLE_SELECTOR =
+  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]),' +
+  ' select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function _modalFocusables(overlay){
+  if(!overlay) return [];
+  return Array.from(overlay.querySelectorAll(_MODAL_FOCUSABLE_SELECTOR))
+    .filter(el => el.offsetParent !== null && !el.hasAttribute('aria-hidden'));
+}
+
+const _modalOpenerStack = [];
+
+function openModal(id){
+  const overlay = document.getElementById(id);
+  if(!overlay) return;
+  _modalOpenerStack.push({ id, opener: document.activeElement });
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  // Wait one frame so display:flex / opacity transition flush, then move focus.
+  requestAnimationFrame(() => {
+    const focusables = _modalFocusables(overlay);
+    const target = focusables.find(el => !el.classList.contains('modal-close')) || focusables[0];
+    if(target) target.focus();
+    else {
+      const modal = overlay.querySelector('.modal');
+      if(modal){
+        if(!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+        modal.focus();
+      }
+    }
+  });
+}
+
+function closeModal(id){
+  const overlay = document.getElementById(id);
+  if(!overlay) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  // Pop the matching opener entry — modals can be nested so we don't
+  // assume the topmost entry matches; we drop the latest entry for this id.
+  for(let i = _modalOpenerStack.length - 1; i >= 0; i--){
+    if(_modalOpenerStack[i].id === id){
+      const { opener } = _modalOpenerStack.splice(i, 1)[0];
+      if(opener && document.contains(opener) && typeof opener.focus === 'function'){
+        opener.focus();
+      }
+      break;
+    }
+  }
+}
+
+// Backdrop click → close (was: classList.remove('open') directly; now route
+// through closeModal so focus gets restored).
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if(e.target === m && m.id) closeModal(m.id); });
+});
+
+// Single keydown handler for all modals: Escape closes; Tab is trapped.
+document.addEventListener('keydown', e => {
+  const openOverlays = Array.from(document.querySelectorAll('.modal-overlay.open'));
+  if(openOverlays.length === 0) return;
+  const top = openOverlays[openOverlays.length - 1];
+  if(e.key === 'Escape'){
+    if(top.id){ closeModal(top.id); e.preventDefault(); }
+    return;
+  }
+  if(e.key === 'Tab'){
+    const focusables = _modalFocusables(top);
+    if(focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if(e.shiftKey && document.activeElement === first){
+      last.focus(); e.preventDefault();
+    } else if(!e.shiftKey && document.activeElement === last){
+      first.focus(); e.preventDefault();
+    } else if(!top.contains(document.activeElement)){
+      // Focus has somehow escaped — pull it back.
+      first.focus(); e.preventDefault();
+    }
+  }
 });
 
 // ══════════════════════════════════════════
@@ -6215,7 +6358,12 @@ async function handleLogin(ev){
     await bootApp();
     logAudit('login', {method: 'password'});
   } catch(e){
-    errBox.textContent = e.message || 'Sign in failed.';
+    const msg = e.message || 'Sign in failed.';
+    errBox.textContent = msg;
+    // Push the error to the assertive live region so screen readers pick it
+    // up immediately. Without this, the visual error appears but is announced
+    // late or not at all (the errBox isn't itself a live region).
+    if(window.announce) window.announce(msg, 'assertive');
     submitBtn.disabled = false;
     submitBtn.textContent = 'Sign in';
   }
