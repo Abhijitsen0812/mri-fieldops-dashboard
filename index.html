@@ -5815,11 +5815,18 @@ const PAGE_RENDERERS={
   ambiguities:renderAmbiguities,
   reports:renderReports,
 };
-// Patch navigate() to call the page renderer each time
+// Patch navigate() to call the page renderer each time. The wrapper must
+// forward ALL arguments — v1.1.0 1c added opts={fromHash,query} which
+// would otherwise be dropped on the way to _origNavigate, breaking deep
+// links like /#/tickets?status=open.
 const _origNavigate=navigate;
-navigate=function(page){
-  _origNavigate(page);
-  if(PAGE_RENDERERS[page]) PAGE_RENDERERS[page]();
+navigate=function(page, opts){
+  _origNavigate(page, opts);
+  // Resolve the actually-rendered page (legacy 'open' is rerouted to
+  // 'tickets' inside _origNavigate; the renderer should match the
+  // destination, not the input).
+  const renderedPage = page === 'open' ? 'tickets' : page;
+  if(PAGE_RENDERERS[renderedPage]) PAGE_RENDERERS[renderedPage]();
 };
 // Debounce history search
 (function(){
