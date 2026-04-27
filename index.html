@@ -3642,9 +3642,10 @@ function renderOpen(){
   const siteCount = new Set(OPEN_TICKETS.map(t=>t.customer)).size;
   const title = document.getElementById('open-panel-title');
   if(title){
-    title.textContent = openCount > 0
-      ? `🚨 Open Tickets — ${openCount} Active (${siteCount} site${siteCount===1?'':'s'})`
-      : `🚨 Open Tickets — None`;
+    const tail = openCount > 0
+      ? `Open Tickets — ${openCount} Active (${siteCount} site${siteCount===1?'':'s'})`
+      : `Open Tickets — None`;
+    title.innerHTML = `<i data-lucide="alert-circle"></i>${tail}`;
   }
   document.getElementById('open-body').innerHTML=OPEN_TICKETS.map(t=>`
     <tr class="clickable" onclick="openDetail('${t.id}')">
@@ -3753,6 +3754,10 @@ function renderPM(){
       <td style="font-size:11px;color:var(--text-dim)">${truncate(t.resolution||t.issue,45)}</td>
       <td>${statusBadge(t.status)}</td>
     </tr>`).join('');
+  // Belt-and-suspenders: explicit Lucide sweep after the PM page rebuilds its
+  // dynamic content. The MutationObserver covers most cases but we guarantee
+  // the swap on every renderPM call (filter chip clicks, refresh, etc).
+  if (window.refreshIcons) window.refreshIcons();
 }
 
 function renderPMTimeline(){
@@ -3842,6 +3847,7 @@ function renderPMReminders(){
       </div>
     </div>`;
   }).join('');
+  if (window.refreshIcons) window.refreshIcons();
 }
 
 // Fixed CC list for every PM reminder — applied in addition to regional engineers in To.
@@ -4192,8 +4198,8 @@ function renderTeam(){
   document.getElementById('team-eng-list').innerHTML = listHtml + footnote;
 
   // Calls-per-engineer chart — ONLY roster engineers, ALL of them, filtered by month
-  document.getElementById('calls-per-eng-title').textContent =
-    `📊 Calls per Engineer — ${monthLabel}`;
+  document.getElementById('calls-per-eng-title').innerHTML =
+    `<i data-lucide="bar-chart-3"></i>Calls per Engineer — ${monthLabel}`;
   const rosterCounts = ENGINEERS.map(e => ({
     name: e.name,
     count: rosterEngCallCount(e, teamMonthFilter),
