@@ -2751,7 +2751,43 @@ function customerCallCount(){
 // ══════════════════════════════════════════
 // DATE PARSING — returns Date or null, and logs suspicious values
 // ══════════════════════════════════════════
-const DATE_AUDIT = { invalid:[], suspicious:[] };
+// DATE_AUDIT was a side-effect dump from parseFlexDate(): every out-of-window
+// or unparseable date got pushed to the matching array. parseFlexDate is on
+// hot render paths (calcSLA / calcMTTR / calcRepeatFailures / renderPM /
+// renderEngineerPerformance) and gets called several times per ticket per
+// render, so the arrays grew monotonically — the alert banner showed
+// "591 tickets dated outside reporting window" after a few tab toggles when
+// the true count is ~29.
+//
+// Fix: dedupe by `${ctx}|${raw}` so each (ticket-field, raw-value) pair
+// records exactly one entry. _reset() is called from loadAllFromDB so a
+// data refresh starts from a clean slate (otherwise edits to a ticket would
+// leave the old raw values in the audit forever).
+const DATE_AUDIT = {
+  invalid: [],
+  suspicious: [],
+  _seenInvalid: new Set(),
+  _seenSuspicious: new Set(),
+  _key(ctx, raw){ return `${ctx||''}|${raw}`; },
+  recordInvalid(entry){
+    const k = this._key(entry.ctx, entry.raw);
+    if(this._seenInvalid.has(k)) return;
+    this._seenInvalid.add(k);
+    this.invalid.push(entry);
+  },
+  recordSuspicious(entry){
+    const k = this._key(entry.ctx, entry.raw);
+    if(this._seenSuspicious.has(k)) return;
+    this._seenSuspicious.add(k);
+    this.suspicious.push(entry);
+  },
+  reset(){
+    this.invalid.length = 0;
+    this.suspicious.length = 0;
+    this._seenInvalid.clear();
+    this._seenSuspicious.clear();
+  },
+};
 
 // Dataset window — anything outside this is suspicious, not "parseable but old"
 const DATA_START = new Date(2025,8,1);   // Sep 2025 (one-month grace before Oct 2025)
@@ -2784,7 +2820,7 @@ function parseFlexDate(s, ctx){
     if(!isNaN(d) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100){
       return d;
     }
-    DATE_AUDIT.invalid.push({raw:s,ctx,reason:'Excel serial unparseable'});
+    DATE_AUDIT.recordInvalid({raw:s,ctx,reason:'Excel serial unparseable'});
     return null;
   }
   const monthMap={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
@@ -2813,12 +2849,12 @@ function parseFlexDate(s, ctx){
     if(!isNaN(tryD)) d=tryD;
   }
   if(!d||isNaN(d)){
-    DATE_AUDIT.invalid.push({raw:s,ctx,reason:'unparseable'});
+    DATE_AUDIT.recordInvalid({raw:s,ctx,reason:'unparseable'});
     return null;
   }
   // Sanity-check against the data window
   if(d<DATA_START||d>DATA_END){
-    DATE_AUDIT.suspicious.push({raw:s,ctx,parsed:d.toISOString().slice(0,10)});
+    DATE_AUDIT.recordSuspicious({raw:s,ctx,parsed:d.toISOString().slice(0,10)});
   }
   return d;
 }
@@ -6077,6 +6113,12 @@ async function loadAllFromDB(opts = {}){
   // write doesn't hijack the UI of everyone currently working.
   const silent = !!opts.silent;
   const setMsg = (m) => { if(!silent) showLoading(m); };
+
+  // Reset the date audit before re-parsing the dataset. The audit's dedupe
+  // Set keys on (ctx + raw); without this reset, edits to a ticket that
+  // remove an old out-of-window date would leave the original raw value
+  // visible in the audit forever.
+  if(DATE_AUDIT && typeof DATE_AUDIT.reset === 'function') DATE_AUDIT.reset();
 
   setMsg('Loading engineers…');
   const { data: engs, error: e1 } = await _sb.from('engineers').select('*').order('id');
