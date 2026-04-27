@@ -678,8 +678,7 @@ button,input,select,textarea{font-family:inherit;}
   <nav class="nav" aria-label="Main navigation">
     <div class="nav-section" role="presentation">Operations</div>
     <div class="nav-item active" data-page="dashboard" role="button" tabindex="0" aria-current="page"><span class="nav-icon"><i data-lucide="layout-dashboard"></i></span> Dashboard</div>
-    <div class="nav-item" data-page="tickets" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="ticket"></i></span> Service History <span class="nav-badge blue" id="nb-total" style="display:none"></span></div>
-    <div class="nav-item" data-page="open" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="alert-circle"></i></span> Open Tickets <span class="nav-badge" id="nb-open" style="display:none"></span></div>
+    <div class="nav-item" data-page="tickets" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="ticket"></i></span> Service History <span class="nav-badge" id="nb-open" style="display:none" title="Open tickets"></span></div>
     <div class="nav-item" data-page="pm" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="calendar-clock"></i></span> PM Schedules <span class="nav-badge amber" id="nb-pm" style="display:none"></span></div>
     <div class="nav-section" role="presentation">Assets &amp; team</div>
     <div class="nav-item" data-page="assets" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="building-2"></i></span> Install Base</div>
@@ -797,8 +796,9 @@ button,input,select,textarea{font-family:inherit;}
       </div>
     </div>
     <div style="padding:12px 18px 0">
-      <div class="filter-tabs" id="history-month-tabs"></div>
-      <div class="filter-tabs" id="history-modality-tabs" style="margin-top:6px"></div>
+      <div class="filter-tabs" id="history-status-tabs" role="group" aria-label="Filter by ticket status"></div>
+      <div class="filter-tabs" id="history-month-tabs" style="margin-top:6px" role="group" aria-label="Filter by month"></div>
+      <div class="filter-tabs" id="history-modality-tabs" style="margin-top:6px" role="group" aria-label="Filter by modality"></div>
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
@@ -2969,12 +2969,86 @@ function normalisePart(raw){
 const APP_VERSION = '1.0.2';
 const APP_RELEASE_DATE = '26 April 2026';
 const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',engperf:'Engineer Performance',reports:'Reports',auditlog:'Audit Log',about:'About'};
+const _VALID_PAGES = new Set(Object.keys(PAGE_TITLES));
+
+// ══════════════════════════════════════════════════════════════════════
+// HASH ROUTING (v1.1.0 1c)
+// ══════════════════════════════════════════════════════════════════════
+// URL format:
+//   /#/<page>[/<deep-link-id>][?<query>]
+// Examples:
+//   /#/dashboard
+//   /#/tickets
+//   /#/tickets?status=open  ← Open Tickets is now a saved filter on /#/tickets
+//   /#/pm
+//   /#/assets
+// The hash is the source of truth for which page is active.
+// ─────────────────────────────────────────────────────────────────────
+
+let _suppressHashChange = false; // set when WE write the hash, to avoid re-entering navigate
+
+function _parseHash(){
+  let h = (window.location.hash || '').replace(/^#\/?/, '');
+  let query = {};
+  const qix = h.indexOf('?');
+  if(qix !== -1){
+    const qs = h.slice(qix + 1);
+    h = h.slice(0, qix);
+    qs.split('&').forEach(pair => {
+      const [k, v] = pair.split('=');
+      if(k) query[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    });
+  }
+  const parts = h.split('/').filter(Boolean);
+  return { page: parts[0] || null, deepLinkId: parts.slice(1).join('/') || null, query };
+}
+
+function _writeHash(page, opts = {}){
+  const { id, query } = opts;
+  let hash = '#/' + page;
+  if(id) hash += '/' + id;
+  if(query && Object.keys(query).length){
+    const qs = Object.entries(query)
+      .filter(([_, v]) => v != null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    if(qs) hash += '?' + qs;
+  }
+  if(window.location.hash !== hash){
+    _suppressHashChange = true;
+    history.replaceState(null, '', hash);
+    _suppressHashChange = false;
+  }
+}
+
+window.addEventListener('hashchange', () => {
+  if(_suppressHashChange) return;
+  const { page, query } = _parseHash();
+  if(page && _VALID_PAGES.has(page)){
+    navigate(page, { fromHash: true, query });
+  }
+});
+
+// Called from bootApp after the user is authenticated and renderAll has run.
+function _hydrateFromHash(){
+  const { page, query } = _parseHash();
+  if(page && _VALID_PAGES.has(page)){
+    navigate(page, { fromHash: true, query });
+  }
+}
 const SUPERADMIN_EMAIL = 'abhijit.s@3imedtech.com';
 // Cache the currently-active nav item + page so navigate() only has to flip
 // two class toggles, never querySelectorAll across the whole document.
 let _activeNavItem = null;
 let _activePage = null;
-function navigate(page){
+function navigate(page, opts = {}){
+  // v1.1.0 1c: Open Tickets merged into Service History as a saved filter.
+  // Anything that still calls navigate('open') (or hits the legacy /#/open
+  // URL) is rerouted to the equivalent filtered view.
+  if(page === 'open'){
+    page = 'tickets';
+    opts = { ...opts, query: { ...(opts.query||{}), status: 'open' } };
+  }
   // Viewers cannot access the Flags & Ambiguities page
   if(page==='ambiguities' && _userRole!=='admin'){
     logAudit('restricted_access_attempt', {target: page});
@@ -3020,6 +3094,22 @@ function navigate(page){
   if(page==='ambiguities') renderAmbiguities();
   if(page==='engperf') renderEngineerPerformance();
   if(page==='auditlog') reloadAuditLog();
+
+  // v1.1.0 1c: apply Service History saved-filter from query.
+  if(page==='tickets'){
+    const wantStatus = (opts.query && opts.query.status) || 'all';
+    if(typeof setHistoryStatusFilter === 'function') setHistoryStatusFilter(wantStatus);
+  }
+
+  // Sync URL hash so the page is bookmarkable. Skip when we're already
+  // responding to a hashchange event (would cause a no-op write but still
+  // good hygiene to short-circuit).
+  if(!opts.fromHash){
+    const writeOpts = {};
+    if(opts.query && Object.keys(opts.query).length) writeOpts.query = opts.query;
+    _writeHash(page, writeOpts);
+  }
+
   // Log navigation — fire-and-forget, don't block UI
   logAudit('navigate', {page});
 }
@@ -3529,23 +3619,64 @@ function renderKPIBand(){
 // ══════════════════════════════════════════
 // RENDER SERVICE HISTORY (FIX 8 — dynamic tabs)
 // ══════════════════════════════════════════
-let historyFilter='all', historySearch='', historyModalityFilter='all';
+let historyFilter='all', historySearch='', historyModalityFilter='all', historyStatusFilter='all';
 
 function buildHistoryTabs(){
   const mc=countByMonth(RAW_TICKETS);
   const total=RAW_TICKETS.length;
-  let html=`<div class="tab active" onclick="filterHistoryMonth(this,'all')">All (${total})</div>`;
+  let html=`<div class="tab${historyFilter==='all'?' active':''}" role="button" tabindex="0" onclick="filterHistoryMonth(this,'all')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterHistoryMonth(this,'all')}">All (${total})</div>`;
   MONTHS.forEach(m=>{
     const cnt=mc[m]||0;
-    html+=`<div class="tab" onclick="filterHistoryMonth(this,'${m}')">${m} (${cnt})</div>`;
+    html+=`<div class="tab${historyFilter===m?' active':''}" role="button" tabindex="0" onclick="filterHistoryMonth(this,'${m}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterHistoryMonth(this,'${m}')}">${m} (${cnt})</div>`;
   });
   document.getElementById('history-month-tabs').innerHTML=html;
 
   // Modality tabs
   const modalities=['All','MRI','PET-CT','DR'];
-  const modHtml=modalities.map(mod=>`<div class="tab${mod==='All'?' active':''}" onclick="filterHistoryModality(this,'${mod.toLowerCase()}')">${mod}</div>`).join('');
+  const modHtml=modalities.map(mod=>{
+    const code=mod.toLowerCase();
+    const isActive = historyModalityFilter===code || (historyModalityFilter==='all'&&mod==='All');
+    return `<div class="tab${isActive?' active':''}" role="button" tabindex="0" onclick="filterHistoryModality(this,'${code}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();filterHistoryModality(this,'${code}')}">${mod}</div>`;
+  }).join('');
   if(document.getElementById('history-modality-tabs')){
     document.getElementById('history-modality-tabs').innerHTML=modHtml;
+  }
+
+  // v1.1.0 1c: status filter chips. Open Tickets is no longer a separate
+  // page — it's now a saved filter on Service History (#/tickets?status=open).
+  const openCount = RAW_TICKETS.filter(isOpen).length;
+  const closedCount = RAW_TICKETS.filter(isClosed).length;
+  const statusOptions = [
+    {code:'all', label:`All (${total})`},
+    {code:'open', label:`Open (${openCount})`},
+    {code:'closed', label:`Closed (${closedCount})`},
+  ];
+  const statusHtml = statusOptions.map(o => {
+    const isActive = historyStatusFilter === o.code;
+    return `<div class="tab${isActive?' active':''}" role="button" tabindex="0" onclick="setHistoryStatusFilter('${o.code}',{push:true})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setHistoryStatusFilter('${o.code}',{push:true})}">${o.label}</div>`;
+  }).join('');
+  if(document.getElementById('history-status-tabs')){
+    document.getElementById('history-status-tabs').innerHTML = statusHtml;
+  }
+}
+
+// v1.1.0 1c: status filter setter — hash-aware. Called from chip clicks
+// (push:true → updates URL) and from navigate() (push:false → already
+// driven by the hash).
+function setHistoryStatusFilter(status, opts={}){
+  const valid = ['all','open','closed'];
+  const next = valid.includes(status) ? status : 'all';
+  if(historyStatusFilter !== next){
+    historyStatusFilter = next;
+    // Re-render chips so the active class lands correctly.
+    buildHistoryTabs();
+    renderHistory();
+  }
+  if(opts.push){
+    // User flipped the chip — push the new state to the URL so it's
+    // bookmarkable without forcing a full re-navigate.
+    const writeOpts = next === 'all' ? {} : { query: { status: next } };
+    _writeHash('tickets', writeOpts);
   }
 }
 
@@ -3648,6 +3779,8 @@ function getFilteredHistoryRows(){
   if(historyFilter!=='all') rows=rows.filter(t=>t.month===historyFilter);
   if(historySearch) rows=rows.filter(t=>[t.customer,t.issue,t.engineer,t.parts,t.resolution,t.model].some(v=>v&&v.toLowerCase().includes(historySearch.toLowerCase())));
   if(historyModalityFilter!=='all') rows=rows.filter(t=>getTicketModality(t)===historyModalityFilter);
+  if(historyStatusFilter==='open') rows=rows.filter(isOpen);
+  else if(historyStatusFilter==='closed') rows=rows.filter(isClosed);
   return rows;
 }
 function renderHistory(){
@@ -6393,6 +6526,9 @@ async function bootApp(){
     if(ue && _currentUser) ue.textContent = _currentUser.email || '';
     applyRoleRestrictions();
     await doFirstPaint();
+    // v1.1.0 1c: respect a deep-link hash on first paint so a bookmarked
+    // /#/pm or /#/tickets?status=open lands the user on that view.
+    _hydrateFromHash();
     // Subscribe to live DB changes so every user sees updates without a refresh.
     // Cheap on the free tier (limit is 200 concurrent connections, 2M msgs/mo).
     attachRealtime();
