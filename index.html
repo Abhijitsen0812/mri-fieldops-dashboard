@@ -3078,22 +3078,26 @@ function navigate(page, opts = {}){
   // "active" simultaneously (user sees the old page stuck on screen).
   if(!_activePage)    _activePage    = document.querySelector('.page.active');
   if(!_activeNavItem) _activeNavItem = document.querySelector('.nav-item.active');
-  // No-op if we're already on this page AND the DOM still reflects it.
-  // Verify the class is really there — defends against external DOM edits
-  // that could leave the cache out of sync with what the user sees.
-  if(_activePage && _activePage.id === `page-${page}` && _activePage.classList.contains('active')) return;
-  if(_activeNavItem){ _activeNavItem.classList.remove('active'); _activeNavItem.removeAttribute('aria-current'); }
-  const nextNav = document.querySelector(`.nav-item[data-page="${page}"]`);
-  if(nextNav){ nextNav.classList.add('active'); nextNav.setAttribute('aria-current', 'page'); _activeNavItem = nextNav; }
-  else { _activeNavItem = null; }
-  if(_activePage) _activePage.classList.remove('active');
-  const nextPage = document.getElementById(`page-${page}`);
-  if(nextPage){ nextPage.classList.add('active'); _activePage = nextPage; }
-  else { _activePage = null; }
-  document.getElementById('topbar-title').textContent=PAGE_TITLES[page]||page;
-  if(page==='ambiguities') renderAmbiguities();
-  if(page==='engperf') renderEngineerPerformance();
-  if(page==='auditlog') reloadAuditLog();
+  // Skip the page+nav class flips when we're already on this page (avoids
+  // a needless re-render). v1.1.0 1c: query-driven side effects (status
+  // filter, hash write) still run unconditionally below — switching from
+  // /#/tickets?status=open to /#/tickets?status=closed has the same target
+  // page but a different filter, and we need that to apply.
+  const samePage = _activePage && _activePage.id === `page-${page}` && _activePage.classList.contains('active');
+  if(!samePage){
+    if(_activeNavItem){ _activeNavItem.classList.remove('active'); _activeNavItem.removeAttribute('aria-current'); }
+    const nextNav = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if(nextNav){ nextNav.classList.add('active'); nextNav.setAttribute('aria-current', 'page'); _activeNavItem = nextNav; }
+    else { _activeNavItem = null; }
+    if(_activePage) _activePage.classList.remove('active');
+    const nextPage = document.getElementById(`page-${page}`);
+    if(nextPage){ nextPage.classList.add('active'); _activePage = nextPage; }
+    else { _activePage = null; }
+    document.getElementById('topbar-title').textContent=PAGE_TITLES[page]||page;
+    if(page==='ambiguities') renderAmbiguities();
+    if(page==='engperf') renderEngineerPerformance();
+    if(page==='auditlog') reloadAuditLog();
+  }
 
   // v1.1.0 1c: apply Service History saved-filter from query.
   if(page==='tickets'){
