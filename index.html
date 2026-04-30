@@ -214,7 +214,15 @@ button,input,select,textarea{font-family:inherit;}
 .panel-action{font-size:11px;color:var(--brand);cursor:pointer;font-weight:600;}
 .panel-body{padding:16px 18px;}
 .data-table{width:100%;border-collapse:collapse;}
-.data-table th{text-align:left;font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:0 12px 10px;border-bottom:1px solid var(--border);}
+.data-table thead th{text-align:left;font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:5;}
+/* v1.2.0 2a — sortable column headers. Click to toggle sort direction.
+   Default cursor stays auto so non-sortable columns don't false-advertise. */
+.data-table thead th.sortable{cursor:pointer;user-select:none;transition:color .12s,background .12s;}
+.data-table thead th.sortable:hover{color:var(--text-dim);background:var(--surface2);}
+.data-table thead th.sortable:focus-visible{outline:none;box-shadow:var(--focus-ring);}
+.data-table thead th .sort-chevron{display:inline-block;margin-left:6px;opacity:.25;color:var(--text-faint);font-size:9px;letter-spacing:0;transition:opacity .12s,color .12s,transform .12s;}
+.data-table thead th.sort-active .sort-chevron{opacity:1;color:var(--brand);}
+.data-table thead th.sort-active.sort-desc .sort-chevron{transform:rotate(180deg);}
 .data-table td{padding:10px 12px;border-bottom:1px solid rgba(36,48,68,.5);font-size:12px;vertical-align:middle;}
 .data-table tr:last-child td{border-bottom:none;}
 .data-table tr:hover td{background:var(--surface2);}
@@ -802,12 +810,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>TICKET ID</th><th>MONTH</th><th>CUSTOMER</th><th>MODEL</th>
-          <th>CALL TYPE</th><th>SYS STATUS</th><th>ISSUE</th>
-          <th>CALL DATE</th><th>ATTENDED</th><th>ENGINEER</th>
-          <th>PARTS</th><th>SYS UP</th><th>STATUS</th>
-        </tr></thead>
+        <thead><tr id="history-thead-row"></tr></thead>
         <tbody id="history-body"></tbody>
       </table>
     </div>
@@ -850,11 +853,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>ID</th><th>CUSTOMER</th><th>PLACE</th><th>MODEL</th><th>CONTRACT</th>
-          <th>FREQ</th><th>LAST PMS</th><th>NEXT DUE</th><th>WINDOW</th>
-          <th>ENGINEERS</th><th>STATUS</th><th class="pm-action-col">ACTION</th>
-        </tr></thead>
+        <thead><tr id="pm-thead-row"></tr></thead>
         <tbody id="pm-body"></tbody>
       </table>
     </div>
@@ -899,12 +898,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>CUST CODE</th><th>CUSTOMER</th><th>TOWN</th><th>STATE</th>
-          <th>MODEL</th><th>MODALITY</th><th>CHANNEL</th><th>GRADIENT</th><th>SW VER</th>
-          <th>COMPRESSOR</th><th>COLDHEAD</th><th>CONTRACT</th><th>CMC START</th><th>CMC END</th>
-          <th>TOTAL CALLS</th><th>OPEN CALLS</th>
-        </tr></thead>
+        <thead><tr id="assets-thead-row"></tr></thead>
         <tbody id="asset-body"></tbody>
       </table>
     </div>
@@ -1052,9 +1046,7 @@ button,input,select,textarea{font-family:inherit;}
     <div style="padding:10px 18px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border)" id="audit-summary">Loading…</div>
     <div style="overflow-x:auto;max-height:70vh;overflow-y:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>WHEN</th><th>USER</th><th>ACTION</th><th>DETAILS</th>
-        </tr></thead>
+        <thead><tr id="audit-thead-row"></tr></thead>
         <tbody id="audit-body"></tbody>
       </table>
     </div>
@@ -1180,6 +1172,90 @@ window.refreshIcons = function refreshIcons(){
     window.lucide.createIcons({ attrs: { class: 'lucide-icon', 'aria-hidden': 'true' } });
   } catch (e) { /* ignore */ }
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// SORTABLE TABLES (v1.2.0 sub-phase 2a)
+// ══════════════════════════════════════════════════════════════════════
+// Generic per-table sort state + helpers. Each table that wants sorting
+// registers a config via `registerSortable(tableId, columns, defaults, rerender)`,
+// then calls `applySort(tableId, rows)` inside its render function before
+// innerHTML assignment, and `renderSortableHeaders(tableId)` to populate
+// the <thead> with click-to-sort headers.
+//
+// columns: [{ key:'call_date', label:'CALL DATE', accessor: t => t._callDate, type:'date' }]
+//   - key:      identifier for this column (used in sort state)
+//   - label:    text shown in <th>
+//   - accessor: row → comparable value (Date / number / string / null)
+//   - type:     'date' | 'number' | 'string' (default) — affects null handling
+//   - sortable: if false, column appears as a static <th> with no click affordance
+//   - thAttrs:  optional extra attrs for the <th> (e.g. for ACTION which is hidden for engineers)
+// ─────────────────────────────────────────────────────────────────────
+
+const _sortConfigs = {};   // tableId → { columns, defaults, rerender }
+const _sortState   = {};   // tableId → { col, dir }
+
+function registerSortable(tableId, columns, defaults, rerender){
+  _sortConfigs[tableId] = { columns, defaults, rerender };
+  if(!_sortState[tableId]) _sortState[tableId] = { ...defaults };
+}
+
+function _compareSortable(a, b, dir){
+  // null/undefined sort to bottom regardless of direction (stable contract).
+  const aNull = a == null || (typeof a === 'number' && Number.isNaN(a));
+  const bNull = b == null || (typeof b === 'number' && Number.isNaN(b));
+  if(aNull && bNull) return 0;
+  if(aNull) return 1;
+  if(bNull) return -1;
+  const sign = dir === 'asc' ? 1 : -1;
+  if(a < b) return -1 * sign;
+  if(a > b) return  1 * sign;
+  return 0;
+}
+
+function applySort(tableId, rows){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg || !st) return rows;
+  const col = cfg.columns.find(c => c.key === st.col);
+  if(!col || col.accessor === undefined) return rows;
+  return [...rows].sort((a, b) => _compareSortable(col.accessor(a), col.accessor(b), st.dir));
+}
+
+function setSort(tableId, key){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg || !st) return;
+  const col = cfg.columns.find(c => c.key === key);
+  if(!col || col.sortable === false) return;
+  if(st.col === key){
+    st.dir = st.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    st.col = key;
+    // First click defaults to whatever the column's defaultDir says, else 'asc'.
+    st.dir = col.defaultDir || 'asc';
+  }
+  if(typeof cfg.rerender === 'function') cfg.rerender();
+}
+
+function renderSortableHeaders(tableId){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg) return '';
+  const html = cfg.columns.map(c => {
+    const sortable = c.sortable !== false;
+    const isActive = sortable && st.col === c.key;
+    const cls = ['sortable', isActive ? 'sort-active' : '', isActive ? `sort-${st.dir}` : '']
+      .filter(Boolean)
+      .join(' ');
+    const ariaSort = isActive ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    const attrs = c.thAttrs || '';
+    if(!sortable){
+      return `<th ${attrs}>${c.label}</th>`;
+    }
+    return `<th ${attrs} class="${cls}" role="columnheader" tabindex="0" aria-sort="${ariaSort}" onclick="setSort('${tableId}','${c.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setSort('${tableId}','${c.key}')}">${c.label}<span class="sort-chevron" aria-hidden="true">▼</span></th>`;
+  }).join('');
+  return html;
+}
 
 // ══════════════════════════════════════════
 // SCREEN-READER ANNOUNCEMENTS (v1.1.0 1b a11y)
@@ -3843,9 +3919,37 @@ function getFilteredHistoryRows(){
   else if(historyStatusFilter==='closed') rows=rows.filter(isClosed);
   return rows;
 }
+// v1.2.0 2a — Service History column sort. Registered once on first
+// render so the sort state survives subsequent re-renders (filter clicks,
+// realtime reloads, etc.).
+const _HISTORY_SORT_COLS = [
+  { key:'id',          label:'TICKET ID', accessor: t => t.id },
+  { key:'month',       label:'MONTH',     accessor: t => parseFlexDate('01 ' + (t.month||''))?.getTime() ?? null, type:'date' },
+  { key:'customer',    label:'CUSTOMER',  accessor: t => (t.customer||'').toLowerCase() },
+  { key:'model',       label:'MODEL',     accessor: t => (t.model||'').toLowerCase() },
+  { key:'call_type',   label:'CALL TYPE', accessor: t => (t.call_type||'').toLowerCase() },
+  { key:'sys_status',  label:'SYS STATUS',accessor: t => (t.sys_status||'').toLowerCase() },
+  { key:'issue',       label:'ISSUE',     accessor: t => (t.issue||'').toLowerCase() },
+  { key:'call_date',   label:'CALL DATE', accessor: t => t._callDate?.getTime() ?? null, defaultDir:'desc' },
+  { key:'attended',    label:'ATTENDED',  accessor: t => parseFlexDate(t.attended_date)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'engineer',    label:'ENGINEER',  accessor: t => (t.engineer||'').toLowerCase() },
+  { key:'parts',       label:'PARTS',     sortable:false },
+  { key:'sys_up',      label:'SYS UP',    accessor: t => t._upDate?.getTime() ?? null, defaultDir:'desc' },
+  { key:'status',      label:'STATUS',    accessor: t => (t.status||'').toLowerCase() },
+];
+let _historySortInited = false;
+function _initHistorySort(){
+  if(_historySortInited) return;
+  registerSortable('history', _HISTORY_SORT_COLS, { col:'call_date', dir:'desc' }, () => renderHistory());
+  _historySortInited = true;
+}
+
 function renderHistory(){
-  const rows=getFilteredHistoryRows();
-  document.getElementById('history-body').innerHTML=rows.map(t=>`
+  _initHistorySort();
+  const sorted = applySort('history', getFilteredHistoryRows());
+  const theadRow = document.getElementById('history-thead-row');
+  if(theadRow) theadRow.innerHTML = renderSortableHeaders('history');
+  document.getElementById('history-body').innerHTML=sorted.map(t=>`
     <tr class="clickable" onclick="openDetail('${t.id}')">
       <td><span class="ticket-id">${t.id}</span></td>
       <td><span class="month-pill">${t.month}</span></td>
@@ -3861,7 +3965,7 @@ function renderHistory(){
       <td style="font-family:var(--mono);font-size:10px">${t.sys_up_date||'—'}</td>
       <td>${statusBadge(t.status)}</td>
     </tr>`).join('');
-  document.getElementById('history-pag').textContent=`Showing ${rows.length} of ${RAW_TICKETS.length} records`;
+  document.getElementById('history-pag').textContent=`Showing ${sorted.length} of ${RAW_TICKETS.length} records`;
 }
 function filterHistory(v){historySearch=v;renderHistory();}
 function filterHistoryMonth(el,m){
@@ -3918,6 +4022,28 @@ function fmtDate(s){
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 }
 
+// v1.2.0 2a — PM Schedule column sort.
+const _PM_SORT_COLS = [
+  { key:'id',         label:'ID',        accessor: r => r.pm.id },
+  { key:'customer',   label:'CUSTOMER',  accessor: r => (r.pm.customer||'').toLowerCase() },
+  { key:'place',      label:'PLACE',     accessor: r => (r.pm.town||'').toLowerCase() },
+  { key:'model',      label:'MODEL',     accessor: r => (r.pm.model||'').toLowerCase() },
+  { key:'contract',   label:'CONTRACT',  accessor: r => (r.pm.contract||'').toLowerCase() },
+  { key:'freq',       label:'FREQ',      accessor: r => r.pm.freq ?? null },
+  { key:'last_pms',   label:'LAST PMS',  accessor: r => parseFlexDate(r.pm.lastPMS)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'next_due',   label:'NEXT DUE',  accessor: r => parseFlexDate(r.pm.nextPMS)?.getTime() ?? null },
+  { key:'window',     label:'WINDOW',    sortable:false },
+  { key:'engineers',  label:'ENGINEERS', sortable:false },
+  { key:'status',     label:'STATUS',    accessor: r => r.st.priority },  // sort by urgency bucket
+  { key:'action',     label:'ACTION',    sortable:false, thAttrs:'class="pm-action-col"' },
+];
+let _pmSortInited = false;
+function _initPmSort(){
+  if(_pmSortInited) return;
+  registerSortable('pm', _PM_SORT_COLS, { col:'next_due', dir:'asc' }, () => renderPM());
+  _pmSortInited = true;
+}
+
 function renderPM(){
   // ── Overview stats ──────────────────────────────────────────
   const statuses = PM_SCHEDULE.map(pm=>pmStatus(pm));
@@ -3945,7 +4071,13 @@ function renderPM(){
       return true;
     });
   }
-  rows.sort((a,b) => a.st.priority - b.st.priority);
+  // v1.2.0 2a — sortable headers. Default is by next-due ascending so the
+  // "what's due next" question reads off the top. Users can click any column
+  // to override; sort survives filter clicks via _sortState.
+  _initPmSort();
+  const pmTheadRow = document.getElementById('pm-thead-row');
+  if(pmTheadRow) pmTheadRow.innerHTML = renderSortableHeaders('pm');
+  rows = applySort('pm', rows);
 
   document.getElementById('pm-count-label').textContent = PM_SCHEDULE.length;
   document.getElementById('pm-body').innerHTML = rows.map(({pm, st}) => {
@@ -4339,9 +4471,43 @@ function findCmcForAsset(a){
   })||null;
 }
 
+// v1.2.0 2a — Install Base column sort. Per-asset accessors include CMC
+// dates and the live ticket counts so users can answer "which assets have
+// the most open tickets?" or "which CMCs expire next?" by clicking.
+const _ASSETS_SORT_COLS = [
+  { key:'code',       label:'CUST CODE',  accessor: a => a.code },
+  { key:'name',       label:'CUSTOMER',   accessor: a => (a.name||'').toLowerCase() },
+  { key:'town',       label:'TOWN',       accessor: a => (a.town||'').toLowerCase() },
+  { key:'state',      label:'STATE',      accessor: a => (a.state||'').toLowerCase() },
+  { key:'model',      label:'MODEL',      accessor: a => (a.model||'').toLowerCase() },
+  { key:'modality',   label:'MODALITY',   accessor: a => getAssetModality(a) },
+  { key:'channel',    label:'CHANNEL',    accessor: a => (a.channel||'').toLowerCase() },
+  { key:'gradient',   label:'GRADIENT',   accessor: a => (a.gradient||'').toLowerCase() },
+  { key:'sw',         label:'SW VER',     accessor: a => (a.sw||'').toLowerCase() },
+  { key:'compressor', label:'COMPRESSOR', accessor: a => (a.compressor||'').toLowerCase() },
+  { key:'coldhead',   label:'COLDHEAD',   accessor: a => (a.coldhead||'').toLowerCase() },
+  { key:'contract',   label:'CONTRACT',   accessor: a => (findCmcForAsset(a)?.contract || '').toLowerCase() },
+  { key:'cmc_start',  label:'CMC START',  accessor: a => parseFlexDate(findCmcForAsset(a)?.start)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'cmc_end',    label:'CMC END',    accessor: a => parseFlexDate(findCmcForAsset(a)?.end)?.getTime() ?? null },
+  { key:'total_calls',label:'TOTAL CALLS',accessor: a => RAW_TICKETS.filter(t => t.asset_code === a.code).length, defaultDir:'desc' },
+  { key:'open_calls', label:'OPEN CALLS', accessor: a => RAW_TICKETS.filter(t => t.asset_code === a.code && isOpen(t)).length, defaultDir:'desc' },
+];
+let _assetsSortInited = false;
+function _initAssetsSort(){
+  if(_assetsSortInited) return;
+  registerSortable('assets', _ASSETS_SORT_COLS, { col:'code', dir:'asc' }, () => renderAssets(_lastAssetSearch));
+  _assetsSortInited = true;
+}
+let _lastAssetSearch = '';
+
 function renderAssets(search=''){
-  const rows=CONFIG_ASSETS.filter(a=>!search||[a.name,a.town,a.model,a.code].some(v=>v&&v.toLowerCase().includes(search.toLowerCase())));
+  _lastAssetSearch = search;
+  const rows=applySort('assets', CONFIG_ASSETS.filter(a=>!search||[a.name,a.town,a.model,a.code].some(v=>v&&v.toLowerCase().includes(search.toLowerCase()))));
   const unmatchedTickets=RAW_TICKETS.filter(t=>t.unmatched);
+
+  _initAssetsSort();
+  const assetsTheadRow = document.getElementById('assets-thead-row');
+  if(assetsTheadRow) assetsTheadRow.innerHTML = renderSortableHeaders('assets');
 
   // Keep the panel header in sync with the actual asset roster (audit F-12).
   // When searching, show "<filtered>/<total>"; otherwise just the total.
@@ -6381,6 +6547,20 @@ async function logAudit(action, details){
 
 // Audit page state
 let _auditRows = [];
+// v1.2.0 2a — Audit Log column sort.
+const _AUDIT_SORT_COLS = [
+  { key:'when',    label:'WHEN',    accessor: r => r.created_at ? new Date(r.created_at).getTime() : null, defaultDir:'desc' },
+  { key:'user',    label:'USER',    accessor: r => (r.user_email||'').toLowerCase() },
+  { key:'action',  label:'ACTION',  accessor: r => (r.action||'').toLowerCase() },
+  { key:'details', label:'DETAILS', sortable:false },
+];
+let _auditSortInited = false;
+function _initAuditSort(){
+  if(_auditSortInited) return;
+  registerSortable('audit', _AUDIT_SORT_COLS, { col:'when', dir:'desc' }, () => renderAuditLog());
+  _auditSortInited = true;
+}
+
 async function reloadAuditLog(){
   const body = document.getElementById('audit-body');
   const summary = document.getElementById('audit-summary');
@@ -6425,6 +6605,13 @@ function renderAuditLog(){
     body.innerHTML = `<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-faint)">No events match the current filter.</td></tr>`;
     return;
   }
+  // v1.2.0 2a — sortable headers for the audit log. Default is `when desc`
+  // so the most recent events sit at the top, matching what users expect.
+  _initAuditSort();
+  const auditTheadRow = document.getElementById('audit-thead-row');
+  if(auditTheadRow) auditTheadRow.innerHTML = renderSortableHeaders('audit');
+  const sortedRows = applySort('audit', rows);
+
   const actionColor = a => {
     if(a === 'login') return 'var(--green)';
     if(a === 'logout') return 'var(--text-dim)';
@@ -6432,7 +6619,7 @@ function renderAuditLog(){
     if(a === 'upload_success') return 'var(--brand)';
     return 'var(--text)';
   };
-  body.innerHTML = rows.map(r => {
+  body.innerHTML = sortedRows.map(r => {
     const when = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
     const details = r.details && typeof r.details === 'object'
       ? Object.entries(r.details).map(([k,v]) => `<span style="color:var(--text-dim)">${esc(k)}:</span> ${esc(typeof v==='string'?v:JSON.stringify(v))}`).join(' · ')
