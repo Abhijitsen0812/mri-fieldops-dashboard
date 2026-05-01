@@ -207,6 +207,19 @@ button,input,select,textarea{font-family:inherit;}
    tile heights consistent whether or not a card has a sparkline. */
 .kpi-spark{margin-top:10px;height:24px;display:flex;align-items:flex-end;}
 .kpi-spark .sparkline{width:100%;max-width:100%;}
+/* v1.2.0 2c — Reports collapsible at the bottom of Dashboard. */
+.reports-details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;margin-top:18px;}
+.reports-details > summary{cursor:pointer;list-style:none;padding:14px 18px;display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:13px;font-weight:500;user-select:none;transition:color .15s,background .15s;}
+.reports-details > summary::-webkit-details-marker{display:none;}
+.reports-details > summary:hover{color:var(--text);background:var(--surface2);}
+.reports-details > summary:focus-visible{outline:none;box-shadow:var(--focus-ring);}
+.reports-details > summary svg{width:16px;height:16px;color:var(--text-dim);flex-shrink:0;}
+.reports-summary-label{flex:1;}
+.reports-summary-toggle::before{content:'+';font-family:var(--mono);font-size:14px;color:var(--text-faint);transition:transform .15s;}
+.reports-details[open] > summary > .reports-summary-toggle::before{content:'−';}
+.reports-body{padding:8px 18px 18px;border-top:1px solid var(--border);}
+.reports-body .panel{margin-bottom:0;}
+.reports-body .grid-2{margin-bottom:14px;}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;}
 .panel-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 /* h2.panel-title (v1.1.0 1b a11y): heading hierarchy promotion. The * reset
@@ -698,7 +711,9 @@ button,input,select,textarea{font-family:inherit;}
     <div class="nav-section" role="presentation">Analysis</div>
     <div class="nav-item admin-only" data-page="ambiguities" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="alert-triangle"></i></span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb" style="display:none"></span></div>
     <div class="nav-item mgr-plus" data-page="engperf" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="award"></i></span> Engineer Performance</div>
-    <div class="nav-item" data-page="reports" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="bar-chart-3"></i></span> Reports</div>
+    <!-- v1.2.0 2c — Reports nav-item removed. Reports panels are folded
+         into Dashboard as a collapsible. /#/reports still resolves via
+         the navigate() redirect for legacy bookmarks. -->
     <div class="nav-item superadmin-only" data-page="auditlog" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="shield"></i></span> Audit Log</div>
     <div class="nav-item" data-page="about" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="info"></i></span> About</div>
   </nav>
@@ -794,6 +809,43 @@ button,input,select,textarea{font-family:inherit;}
     <div class="panel-head"><h2 class="panel-title" id="kpi-band-title"><i data-lucide="gauge"></i>Live KPIs</h2></div>
     <div class="panel-body"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:20px;text-align:center" id="kpi-band"></div></div>
   </div>
+
+  <!-- v1.2.0 2c — Reports folded into Dashboard. Collapsed by default so the
+       dashboard doesn't bloat; expand to see KPI Summary, Parts Failures,
+       and Customer Call Frequency. The previous /#/reports nav entry is
+       gone; legacy /#/reports URLs redirect to /#/dashboard. -->
+  <details class="reports-details">
+    <summary>
+      <i data-lucide="bar-chart-3"></i>
+      <span class="reports-summary-label">Reports — KPI Summary, Parts Failures, Customer Frequency</span>
+      <span class="reports-summary-toggle"></span>
+    </summary>
+    <div class="reports-body">
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px" class="export-btn-row">
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="exportReportsCSV()" title="Export KPI + customer frequency to CSV"><i data-lucide="download"></i>Export CSV</button>
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="printCurrentPage('Reports')" title="Print / Save as PDF"><i data-lucide="printer"></i>Print / PDF</button>
+      </div>
+      <div class="grid-2 g-1-1">
+        <div class="panel">
+          <div class="panel-head"><h3 class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</h3></div>
+          <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3 class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</h3></div>
+          <div class="panel-body"><div class="bar-chart-wrap" id="bar-parts" style="height:180px"></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3 class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</h3></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
+            <tbody id="customer-freq-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </details>
 </div>
 
 <!-- ██ SERVICE HISTORY ██ -->
@@ -958,31 +1010,13 @@ button,input,select,textarea{font-family:inherit;}
 </div>
 
 <!-- ██ REPORTS ██ -->
-<div class="page" id="page-reports">
-  <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px" class="export-btn-row">
-    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="exportReportsCSV()" title="Export KPI + customer frequency to CSV"><i data-lucide="download"></i>Export CSV</button>
-    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="printCurrentPage('Reports')" title="Print / Save as PDF"><i data-lucide="printer"></i>Print / PDF</button>
-  </div>
-  <div class="grid-2 g-1-1">
-    <div class="panel">
-      <div class="panel-head"><h2 class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</h2></div>
-      <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h2 class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</h2></div>
-      <div class="panel-body"><div class="bar-chart-wrap" id="bar-parts" style="height:180px"></div></div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h2 class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</h2></div>
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
-        <tbody id="customer-freq-body"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+<!-- v1.2.0 2c — page-reports is intentionally empty. The three Reports
+     panels (KPI Summary, Parts Failures, Customer Frequency) moved into
+     Dashboard as a collapsible <details>. The page id is kept so that
+     code paths that still reference 'page-reports' don't crash; the
+     navigate('reports') redirect routes legacy callers (and bookmarked
+     /#/reports URLs) to /#/dashboard. -->
+<div class="page" id="page-reports" hidden></div>
 
 <!-- ██ AUDIT LOG (superadmin-only) ██ -->
 <!-- ENGINEER PERFORMANCE — admin + manager only -->
@@ -3164,6 +3198,11 @@ function navigate(page, opts = {}){
   if(page === 'open'){
     page = 'tickets';
     opts = { ...opts, query: { ...(opts.query||{}), status: 'open' } };
+  }
+  // v1.2.0 2c: Reports page deleted; folded into Dashboard as a collapsible.
+  // Legacy /#/reports bookmarks redirect to /#/dashboard.
+  if(page === 'reports'){
+    page = 'dashboard';
   }
   // Viewers cannot access the Flags & Ambiguities page
   if(page==='ambiguities' && _userRole!=='admin'){
@@ -6126,14 +6165,18 @@ setInterval(() => {
 // ══════════════════════════════════════════
 // Page-specific renderers so we can re-run them on navigate
 const PAGE_RENDERERS={
-  dashboard:()=>{renderDashMonthTabs();renderAlertBanner();renderKPIGrid();renderDashOpen();renderDashEngineers();renderRenewals();renderBarMonthly();renderCallTypeChart();renderTopCustomers();renderKPIBand();},
+  // v1.2.0 2c — dashboard now also renders the Reports panels (folded
+  // in as a collapsible). renderReports() targets the same #report-kpi-table /
+  // #bar-parts / #customer-freq-body IDs; they live inside the dashboard
+  // <details> instead of in their own page now.
+  dashboard:()=>{renderDashMonthTabs();renderAlertBanner();renderKPIGrid();renderDashOpen();renderDashEngineers();renderRenewals();renderBarMonthly();renderCallTypeChart();renderTopCustomers();renderKPIBand();renderReports();},
   tickets:()=>{buildHistoryTabs();renderHistory();},
   open:renderOpen,
   pm:renderPM,
   assets:()=>renderAssets(),
   team:renderTeam,
   ambiguities:renderAmbiguities,
-  reports:renderReports,
+  // 'reports' key omitted — navigate('reports') redirects to 'dashboard'.
 };
 // Patch navigate() to call the page renderer each time. The wrapper must
 // forward ALL arguments — v1.1.0 1c added opts={fromHash,query} which
