@@ -203,6 +203,10 @@ button,input,select,textarea{font-family:inherit;}
 .kpi-delta.up{color:var(--green);}
 .kpi-delta.down{color:var(--red);}
 .kpi-delta.warn{color:var(--amber);}
+/* v1.2.0 2b — sparkline slot under the kpi-delta. Reserved height keeps the
+   tile heights consistent whether or not a card has a sparkline. */
+.kpi-spark{margin-top:10px;height:24px;display:flex;align-items:flex-end;}
+.kpi-spark .sparkline{width:100%;max-width:100%;}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;}
 .panel-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 /* h2.panel-title (v1.1.0 1b a11y): heading hierarchy promotion. The * reset
@@ -3432,6 +3436,85 @@ function renderAlertBanner(){
   if (window.refreshIcons) window.refreshIcons();
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// SVG SPARKLINES (v1.2.0 sub-phase 2b — dashboard analytics)
+// ══════════════════════════════════════════════════════════════════════
+// Inline SVG sparkline used by the top-row KPI cards. Always shows the full
+// MONTHS series so the number on the card and the trend live next to each
+// other; the highlighted point is the currently-filtered month (if any).
+//   _ticketsByMonth(filter)   – count series across MONTHS (handles null gaps)
+//   _slaByMonth()             – per-month SLA% (null when <5 tickets in that month)
+//   _mttrByMonth()            – per-month MTTR avg (null when no qualifying tickets)
+//   _sparkline(values, opts)  – returns inline SVG string. type:'line'|'bar'.
+// ─────────────────────────────────────────────────────────────────────
+
+function _ticketsByMonthSeries(filterFn){
+  return MONTHS.map(m => RAW_TICKETS.filter(t => t.month === m && (filterFn ? filterFn(t) : true)).length);
+}
+
+function _slaByMonthSeries(){
+  return MONTHS.map(m => {
+    const monthTickets = RAW_TICKETS.filter(t => t.month === m);
+    const r = calcSLA(monthTickets);
+    return r.total >= 5 ? r.pct : null;
+  });
+}
+
+function _mttrByMonthSeries(){
+  return MONTHS.map(m => {
+    const monthTickets = RAW_TICKETS.filter(t => t.month === m);
+    const r = calcMTTR(monthTickets);
+    return r.avg || null;
+  });
+}
+
+function _sparkline(values, opts = {}){
+  if(!values || values.length === 0) return '';
+  // Treat null as "no data" — replace with the previous defined value so the
+  // line stays continuous; hide the marker at that index.
+  const cleaned = []; let prev = 0;
+  values.forEach(v => { const cur = v == null ? prev : v; cleaned.push(cur); prev = cur; });
+  const {
+    width = 96, height = 22, color = 'var(--brand)',
+    type = 'line', fill = true, highlightIndex = -1,
+  } = opts;
+  const max = Math.max(...cleaned, 0.001);
+  const min = Math.min(...cleaned, 0);
+  const range = max - min || 1;
+  const pad = 2;
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  if(type === 'bar'){
+    const slot = innerW / cleaned.length;
+    const barW = Math.max(1, slot - 1);
+    const bars = cleaned.map((v,i) => {
+      const h = ((v - min) / range) * innerH;
+      const x = pad + i * slot + (slot - barW)/2;
+      const y = height - pad - h;
+      const isHL = i === highlightIndex;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${color}" opacity="${isHL ? 1 : 0.55}" />`;
+    }).join('');
+    return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true" focusable="false">${bars}</svg>`;
+  }
+  const stepX = innerW / Math.max(1, cleaned.length - 1);
+  const points = cleaned.map((v,i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / range) * innerH;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const linePath = `M ${points.join(' L ')}`;
+  const areaPath = fill
+    ? `${linePath} L ${(pad + (cleaned.length-1)*stepX).toFixed(1)},${(height-pad).toFixed(1)} L ${pad},${(height-pad).toFixed(1)} Z`
+    : '';
+  let dot = '';
+  if(highlightIndex >= 0 && highlightIndex < cleaned.length && values[highlightIndex] != null){
+    const x = pad + highlightIndex * stepX;
+    const y = pad + (1 - (cleaned[highlightIndex] - min) / range) * innerH;
+    dot = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${color}" />`;
+  }
+  return `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true" focusable="false">${fill ? `<path d="${areaPath}" fill="${color}" opacity="0.15" />` : ''}<path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />${dot}</svg>`;
+}
+
 function renderKPIGrid(){
   const scope = filteredTickets();
   const scopeOpen = scope.filter(isOpen);
@@ -3478,20 +3561,31 @@ function renderKPIGrid(){
   // Lock indicator for non-filterable cards
   const lockTag = `<span style="font-family:var(--mono);font-size:8px;color:var(--text-faint);letter-spacing:1px">· ALL TIME</span>`;
 
+  // v1.2.0 2b — pre-compute sparklines for the trend-able KPIs.
+  // Highlight the selected month if a filter is active; otherwise no highlight.
+  const hlIdx = isFiltered ? MONTHS.indexOf(dashMonthFilter) : -1;
+  const sparkAll      = _sparkline(_ticketsByMonthSeries(),                { color:'#3b82f6', type:'bar', highlightIndex: hlIdx });
+  const sparkIncident = _sparkline(_ticketsByMonthSeries(isIncident),       { color:'#ef4444', type:'bar', highlightIndex: hlIdx });
+  const sparkPM       = _sparkline(_ticketsByMonthSeries(isPM),             { color:'#10b981', type:'bar', highlightIndex: hlIdx });
+  const sparkSLA      = _sparkline(_slaByMonthSeries(),                     { color:'#10b981', type:'line', highlightIndex: hlIdx });
+  const sparkMTTR     = _sparkline(_mttrByMonthSeries(),                    { color:'#06b6d4', type:'line', highlightIndex: hlIdx });
+
   const html = `
-    <div class="kpi-card blue"><div class="kpi-label">Total Service Calls</div><div class="kpi-value blue">${scope.length}</div><div class="kpi-delta">${esc(scopeLabel)}</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Incidents</div><div class="kpi-value red">${scopeIncidents.length}</div><div class="kpi-delta down">${scope.length?Math.round(scopeIncidents.length/scope.length*100):0}% of scope</div></div>
-    <div class="kpi-card green"><div class="kpi-label">PM Calls</div><div class="kpi-value green">${scopePM.length}</div><div class="kpi-delta up">${esc(scopeLabel)}</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total Service Calls</div><div class="kpi-value blue">${scope.length}</div><div class="kpi-delta">${esc(scopeLabel)}</div><div class="kpi-spark">${sparkAll}</div></div>
+    <div class="kpi-card red"><div class="kpi-label">Incidents</div><div class="kpi-value red">${scopeIncidents.length}</div><div class="kpi-delta down">${scope.length?Math.round(scopeIncidents.length/scope.length*100):0}% of scope</div><div class="kpi-spark">${sparkIncident}</div></div>
+    <div class="kpi-card green"><div class="kpi-label">PM Calls</div><div class="kpi-value green">${scopePM.length}</div><div class="kpi-delta up">${esc(scopeLabel)}</div><div class="kpi-spark">${sparkPM}</div></div>
     <div class="kpi-card amber"><div class="kpi-label">Open Tickets${isFiltered?'':''}</div><div class="kpi-value amber">${scopeOpen.length}</div><div class="kpi-delta warn">${isFiltered?'Opened in '+dashMonthFilter:'Require action now'}</div></div>
     ${(()=>{ const p=pendingAmbCount(); return `<div class="kpi-card ${p>0?'purple':'green'} admin-only" title="Data flags apply to the entire dataset regardless of filter"><div class="kpi-label">Data Flags ${lockTag}</div><div class="kpi-value ${p>0?'purple':'green'}">${p}</div><div class="kpi-delta ${p>0?'warn':''}">${p>0?'Need your review':'✓ All reviewed'}</div></div>`; })()}
     <div class="kpi-card cyan" title="Install base doesn't change by month"><div class="kpi-label">Install Base Covered ${lockTag}</div><div class="kpi-value cyan">${CONFIG_ASSETS.length}</div><div class="kpi-delta">Across ${new Set(CONFIG_ASSETS.map(a=>a.town)).size} cities</div></div>
     <div class="kpi-card green" title="${slaTooltip}" style="cursor:help">
       <div class="kpi-label">SLA Compliance <span style="font-size:11px;vertical-align:middle">ⓘ</span></div>
       ${slaVal}${slaSubLabel}
+      <div class="kpi-spark">${sparkSLA}</div>
     </div>
     <div class="kpi-card cyan" title="${mttrTooltip}" style="cursor:help">
       <div class="kpi-label">MTTR (avg days) <span style="font-size:11px;vertical-align:middle">ⓘ</span></div>
       ${mttrVal}${mttrSub}
+      <div class="kpi-spark">${sparkMTTR}</div>
     </div>
     <div class="kpi-card amber" title="${rfTooltip}" style="cursor:help">
       <div class="kpi-label">Repeat Failures ${lockTag}</div>
