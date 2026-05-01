@@ -12,5 +12,14 @@ staging-dump-*.sql
 .vscode/
 node_modules/
 
-# graphify knowledge-graph artifacts (re-buildable from source; can leak token costs)
+# Generated knowledge graph output
 graphify-out/
+
+# Local Claude workflow setup — keep local only for now
+CLAUDE.md
+.claude/
+.claudeignore
+AGENTS.md
+FIELDOPS_QUICK_CONTEXT.md
+PROJECT_MAP.md
+TEST_MATRIX.md
