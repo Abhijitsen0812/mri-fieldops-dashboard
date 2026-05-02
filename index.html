@@ -207,6 +207,27 @@ button,input,select,textarea{font-family:inherit;}
    tile heights consistent whether or not a card has a sparkline. */
 .kpi-spark{margin-top:10px;height:24px;display:flex;align-items:flex-end;}
 .kpi-spark .sparkline{width:100%;max-width:100%;}
+/* v1.2.0 2d — global search. Topbar input + absolute dropdown panel. */
+.global-search{position:relative;display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-md);padding:5px 8px;width:280px;max-width:35%;flex-shrink:1;transition:border-color .15s,box-shadow .15s;}
+.global-search:focus-within{border-color:var(--brand);box-shadow:var(--focus-ring);}
+.global-search-icon{width:14px;height:14px;color:var(--text-faint);flex-shrink:0;}
+.global-search-input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;font-family:var(--sans);padding:0;}
+.global-search-input::placeholder{color:var(--text-faint);}
+.global-search-input::-webkit-search-cancel-button{display:none;}
+.global-search-kbd{font-family:var(--mono);font-size:10px;color:var(--text-faint);background:var(--surface3);border:1px solid var(--border);border-radius:3px;padding:1px 5px;flex-shrink:0;}
+.global-search-results{position:fixed;top:54px;right:18px;width:420px;max-width:calc(100vw - 36px);max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-4);z-index:200;}
+.global-search-section{padding:6px 4px;}
+.global-search-section-label{font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:8px 12px 4px;}
+.global-search-result{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:var(--radius-sm);margin:0 6px;color:var(--text-dim);transition:background .12s,color .12s;}
+.global-search-result:hover,.global-search-result.is-active{background:var(--surface2);color:var(--text);}
+.global-search-result svg{width:14px;height:14px;color:var(--text-faint);flex-shrink:0;}
+.global-search-result .gs-primary{font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.global-search-result .gs-secondary{font-size:10px;color:var(--text-faint);font-family:var(--mono);flex-shrink:0;}
+.global-search-result mark{background:rgba(59,130,246,.25);color:var(--text);padding:0 2px;border-radius:2px;}
+.global-search-empty{padding:18px 16px;text-align:center;font-size:12px;color:var(--text-faint);}
+@media (max-width: 900px){
+  .global-search{display:none;}
+}
 /* v1.2.0 2c — Reports collapsible at the bottom of Dashboard. */
 .reports-details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;margin-top:18px;}
 .reports-details > summary{cursor:pointer;list-style:none;padding:14px 18px;display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:13px;font-weight:500;user-select:none;transition:color .15s,background .15s;}
@@ -730,6 +751,23 @@ button,input,select,textarea{font-family:inherit;}
 <header class="topbar">
   <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
   <div class="topbar-title" id="topbar-title">Dashboard</div>
+  <!-- v1.2.0 2d — global search. Input + dropdown of results spanning
+       tickets, customers, engineers, and PM schedules. Cmd/Ctrl+K focuses. -->
+  <div class="global-search" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-owns="global-search-results">
+    <i data-lucide="search" class="global-search-icon" aria-hidden="true"></i>
+    <input
+      type="search"
+      id="global-search-input"
+      class="global-search-input"
+      placeholder="Search tickets, customers, engineers… (⌘K)"
+      aria-label="Global search"
+      aria-autocomplete="list"
+      aria-controls="global-search-results"
+      autocomplete="off"
+    >
+    <kbd class="global-search-kbd" aria-hidden="true">⌘K</kbd>
+  </div>
+  <div id="global-search-results" class="global-search-results" role="listbox" aria-label="Search results" hidden></div>
   <div id="env-pill" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;background:#f59e0b;color:#000;box-shadow:0 0 0 1px #b45309 inset" title="You are on the STAGING environment. Data here is isolated from production.">STAGING</div>
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
   <input type="file" id="xlsx-upload" accept=".xlsx" aria-label="Upload service operations XLSX file" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
@@ -3186,6 +3224,275 @@ function _hydrateFromHash(){
     navigate(page, { fromHash: true, query });
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// GLOBAL SEARCH (v1.2.0 sub-phase 2d)
+// ══════════════════════════════════════════════════════════════════════
+// Single search field in the topbar that indexes the four primary entity
+// types and routes the user to the right page (or detail modal) on click.
+//   - Cmd/Ctrl+K focuses the input from anywhere in the app.
+//   - ↑/↓ navigates results, Enter opens, Esc closes/clears.
+//   - Hits: top 6 tickets, top 5 customers, all engineers, top 5 PMs.
+//   - Uses substring match (case-insensitive) with simple ranking.
+// ─────────────────────────────────────────────────────────────────────
+
+let _searchActiveIndex = 0;
+let _searchResults = [];
+
+function _highlight(text, q){
+  if(!text || !q) return esc(text || '');
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if(idx === -1) return esc(text);
+  return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + q.length)) + '</mark>' + esc(text.slice(idx + q.length));
+}
+
+function _gsScore(haystack, q){
+  // 0 = no match. Higher = better. Exact-prefix beats substring beats none.
+  if(!haystack) return 0;
+  const h = haystack.toLowerCase();
+  const ql = q.toLowerCase();
+  if(h === ql) return 100;
+  if(h.startsWith(ql)) return 70;
+  const idx = h.indexOf(ql);
+  if(idx === -1) return 0;
+  return Math.max(10, 50 - idx);  // earlier match = higher score
+}
+
+function _searchAll(q){
+  if(!q || q.trim().length < 2) return [];
+  const ql = q.trim().toLowerCase();
+  const results = [];
+
+  // Tickets — score on id, customer, issue, engineer
+  const tixMatches = [];
+  if(typeof RAW_TICKETS !== 'undefined' && Array.isArray(RAW_TICKETS)){
+    for(const t of RAW_TICKETS){
+      const s = Math.max(
+        _gsScore(t.id, ql),
+        _gsScore(t.customer, ql),
+        _gsScore(t.issue, ql) * 0.7,
+        _gsScore(t.engineer, ql) * 0.6,
+      );
+      if(s > 0) tixMatches.push({ score: s, item: t });
+    }
+    tixMatches.sort((a,b) => b.score - a.score);
+    for(const m of tixMatches.slice(0, 6)){
+      const t = m.item;
+      results.push({
+        category: 'Ticket',
+        icon: 'ticket',
+        primary: `${t.id} — ${t.customer || ''}`,
+        secondary: t.month || '',
+        primaryHighlightSrc: `${t.id} — ${t.customer || ''}`,
+        action: () => { openDetail(t.id); _closeSearch(); },
+      });
+    }
+  }
+
+  // Customers / Assets
+  const assetMatches = [];
+  if(typeof CONFIG_ASSETS !== 'undefined' && Array.isArray(CONFIG_ASSETS)){
+    for(const a of CONFIG_ASSETS){
+      const s = Math.max(
+        _gsScore(a.code, ql),
+        _gsScore(a.name, ql),
+        _gsScore(a.town, ql) * 0.7,
+        _gsScore(a.model, ql) * 0.6,
+      );
+      if(s > 0) assetMatches.push({ score: s, item: a });
+    }
+    assetMatches.sort((a,b) => b.score - a.score);
+    for(const m of assetMatches.slice(0, 5)){
+      const a = m.item;
+      results.push({
+        category: 'Customer',
+        icon: 'building-2',
+        primary: `${a.code} — ${a.name || ''}`,
+        secondary: a.town || '',
+        primaryHighlightSrc: `${a.code} — ${a.name || ''}`,
+        action: () => {
+          navigate('assets');
+          _closeSearch();
+          // Best-effort: prefill the asset search box if it exists.
+          const box = document.querySelector('#page-assets input.search-box');
+          if(box){ box.value = a.code; if(typeof filterAssets === 'function') filterAssets(a.code); }
+        },
+      });
+    }
+  }
+
+  // Engineers
+  const engMatches = [];
+  if(typeof ENGINEERS !== 'undefined' && Array.isArray(ENGINEERS)){
+    for(const e of ENGINEERS){
+      const s = Math.max(
+        _gsScore(e.name, ql),
+        _gsScore(e.region, ql) * 0.6,
+        _gsScore(e.email, ql) * 0.5,
+      );
+      if(s > 0) engMatches.push({ score: s, item: e });
+    }
+    engMatches.sort((a,b) => b.score - a.score);
+    for(const m of engMatches){
+      const e = m.item;
+      results.push({
+        category: 'Engineer',
+        icon: 'users',
+        primary: e.name,
+        secondary: e.region || '',
+        primaryHighlightSrc: e.name,
+        action: () => { navigate('team'); _closeSearch(); },
+      });
+    }
+  }
+
+  // PM Schedules
+  const pmMatches = [];
+  if(typeof PM_SCHEDULE !== 'undefined' && Array.isArray(PM_SCHEDULE)){
+    for(const pm of PM_SCHEDULE){
+      const s = Math.max(
+        _gsScore(pm.id, ql),
+        _gsScore(pm.customer, ql),
+        _gsScore(pm.town, ql) * 0.7,
+        _gsScore(pm.model, ql) * 0.6,
+      );
+      if(s > 0) pmMatches.push({ score: s, item: pm });
+    }
+    pmMatches.sort((a,b) => b.score - a.score);
+    for(const m of pmMatches.slice(0, 5)){
+      const pm = m.item;
+      results.push({
+        category: 'PM',
+        icon: 'calendar-clock',
+        primary: `${pm.id} — ${pm.customer || ''}`,
+        secondary: pm.nextPMS || '',
+        primaryHighlightSrc: `${pm.id} — ${pm.customer || ''}`,
+        action: () => { navigate('pm'); _closeSearch(); },
+      });
+    }
+  }
+
+  // Apply highlight markup once at the end
+  for(const r of results){
+    r.primaryHtml = _highlight(r.primaryHighlightSrc, q.trim());
+  }
+  return results;
+}
+
+function _renderSearchResults(q){
+  const dropdown = document.getElementById('global-search-results');
+  const combobox = document.querySelector('.global-search');
+  if(!dropdown || !combobox) return;
+  if(!q || q.trim().length < 2){
+    dropdown.hidden = true;
+    combobox.setAttribute('aria-expanded', 'false');
+    _searchResults = [];
+    return;
+  }
+  _searchResults = _searchAll(q);
+  if(_searchResults.length === 0){
+    dropdown.innerHTML = `<div class="global-search-empty">No matches for "${esc(q)}"</div>`;
+    dropdown.hidden = false;
+    combobox.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  // Group by category
+  const groups = {};
+  _searchResults.forEach((r, i) => {
+    if(!groups[r.category]) groups[r.category] = [];
+    groups[r.category].push({ ...r, _idx: i });
+  });
+  let html = '';
+  for(const [cat, items] of Object.entries(groups)){
+    html += `<div class="global-search-section"><div class="global-search-section-label">${esc(cat)}</div>`;
+    for(const r of items){
+      const isActive = r._idx === _searchActiveIndex;
+      html += `<div class="global-search-result${isActive ? ' is-active' : ''}" role="option" aria-selected="${isActive}" data-index="${r._idx}">
+        <i data-lucide="${r.icon}" aria-hidden="true"></i>
+        <span class="gs-primary">${r.primaryHtml}</span>
+        <span class="gs-secondary">${esc(r.secondary)}</span>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  dropdown.innerHTML = html;
+  dropdown.hidden = false;
+  combobox.setAttribute('aria-expanded', 'true');
+  if(window.refreshIcons) window.refreshIcons();
+  // Wire click on each result
+  dropdown.querySelectorAll('.global-search-result').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.index, 10);
+      const r = _searchResults[idx];
+      if(r && typeof r.action === 'function') r.action();
+    });
+  });
+}
+
+function _closeSearch(){
+  const input = document.getElementById('global-search-input');
+  const dropdown = document.getElementById('global-search-results');
+  const combobox = document.querySelector('.global-search');
+  if(input) input.value = '';
+  if(dropdown){ dropdown.hidden = true; dropdown.innerHTML = ''; }
+  if(combobox) combobox.setAttribute('aria-expanded', 'false');
+  _searchResults = [];
+  _searchActiveIndex = 0;
+}
+
+(function _wireGlobalSearch(){
+  // Cmd/Ctrl+K focuses the search from anywhere in the app.
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'){
+      e.preventDefault();
+      const input = document.getElementById('global-search-input');
+      if(input){ input.focus(); input.select(); }
+    }
+  });
+  // Defer until DOMContentLoaded so the input element exists.
+  function attach(){
+    const input = document.getElementById('global-search-input');
+    if(!input) return;
+    let debounce;
+    input.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        _searchActiveIndex = 0;
+        _renderSearchResults(input.value);
+      }, 80);
+    });
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){ _closeSearch(); input.blur(); }
+      else if(e.key === 'ArrowDown'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        _searchActiveIndex = (_searchActiveIndex + 1) % _searchResults.length;
+        _renderSearchResults(input.value);
+      } else if(e.key === 'ArrowUp'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        _searchActiveIndex = (_searchActiveIndex - 1 + _searchResults.length) % _searchResults.length;
+        _renderSearchResults(input.value);
+      } else if(e.key === 'Enter'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        const r = _searchResults[_searchActiveIndex];
+        if(r && typeof r.action === 'function') r.action();
+      }
+    });
+    // Close when focus leaves the search area entirely (small delay to allow click)
+    document.addEventListener('click', (e) => {
+      const sb = document.querySelector('.global-search');
+      const dd = document.getElementById('global-search-results');
+      if(!sb || !dd) return;
+      if(!sb.contains(e.target) && !dd.contains(e.target)){ _closeSearch(); }
+    });
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', attach);
+  } else { attach(); }
+})();
 const SUPERADMIN_EMAIL = 'abhijit.s@3imedtech.com';
 // Cache the currently-active nav item + page so navigate() only has to flip
 // two class toggles, never querySelectorAll across the whole document.
