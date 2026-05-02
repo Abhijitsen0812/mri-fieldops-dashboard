@@ -6208,14 +6208,14 @@ function renderAmbiguities(){
             <option value="Service Manager">Service Manager</option>
           </select>
         </div>
-        <div style="margin-bottom:10px">
-          <label style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px">DECISION</label>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Confirmed Issue"> Confirmed Issue</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="False Positive"> False Positive</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Resolved"> Resolved</label>
+        <fieldset style="margin-bottom:10px;border:none;padding:0;">
+          <legend style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px;padding:0;">DECISION</legend>
+          <div role="radiogroup" aria-label="Review decision" style="display:flex;gap:10px;flex-wrap:wrap">
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Confirmed Issue" aria-label="Confirmed Issue"> Confirmed Issue</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="False Positive" aria-label="False Positive"> False Positive</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Resolved" aria-label="Resolved"> Resolved</label>
           </div>
-        </div>
+        </fieldset>
         <div style="margin-bottom:10px">
           <label style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px">NOTES (min 30 chars)</label>
           <textarea id="rp-notes-${i}" class="search-box" style="width:100%;height:70px;resize:vertical" placeholder="Describe your review decision…" oninput="checkReviewReady(${i})"></textarea>
