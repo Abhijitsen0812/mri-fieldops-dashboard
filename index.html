@@ -203,8 +203,8 @@ button,input,select,textarea{font-family:inherit;}
 .kpi-delta.up{color:var(--green);}
 .kpi-delta.down{color:var(--red);}
 .kpi-delta.warn{color:var(--amber);}
-/* v1.3.0 — KPI card status row: foot container, status pills, thin progress bar.
-   Replaces decorative v1.2.0 2b sparklines with operational indicators. */
+/* v1.2.0 — KPI card status row: foot container, status pills, thin progress bar.
+   Replaces decorative v1.2.0-2b sparklines with operational indicators. */
 .kpi-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:6px;min-height:18px;}
 .kpi-status{display:inline-flex;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:var(--radius-pill);font-weight:600;white-space:nowrap;}
 .kpi-status.good{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2);}
@@ -1245,8 +1245,8 @@ button,input,select,textarea{font-family:inherit;}
 // ══════════════════════════════════════════
 // APP VERSION — baseline released 2026-04-24
 // ══════════════════════════════════════════
-window.APP_VERSION = '1.1.0';
-window.APP_BUILD   = { version: '1.1.0', released: '2026-04-28', tag: 'v1.1.0' };
+window.APP_VERSION = '1.2.0';
+window.APP_BUILD   = { version: '1.2.0', released: '2026-05-04', tag: 'v1.2.0' };
 
 // ══════════════════════════════════════════
 // LUCIDE ICON RENDER HOOK (v1.1.0 1a)
@@ -3170,7 +3170,7 @@ function normalisePart(raw){
 // ══════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const APP_RELEASE_DATE = '28 April 2026';
 const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',engperf:'Engineer Performance',reports:'Reports',auditlog:'Audit Log',about:'About'};
 const _VALID_PAGES = new Set(Object.keys(PAGE_TITLES));
@@ -3819,7 +3819,7 @@ function renderAlertBanner(){
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// DASHBOARD KPI GRID (v1.3.0 — operational status indicators)
+// DASHBOARD KPI GRID (v1.2.0 — operational status indicators)
 // ══════════════════════════════════════════════════════════════════════
 // v1.2.0 sub-phase 2b SVG sparklines were replaced with status pills and
 // thin progress bars. Decorative trend lines were not driving operator
@@ -3873,7 +3873,7 @@ function renderKPIGrid(){
   // Lock indicator for non-filterable cards
   const lockTag = `<span style="font-family:var(--mono);font-size:8px;color:var(--text-faint);letter-spacing:1px">· ALL TIME</span>`;
 
-  // v1.3.0 — derived status logic for KPI foot rows. Pure display, no
+  // v1.2.0 — derived status logic for KPI foot rows. Pure display, no
   // calculation changes. Each card answers: green = OK, amber = watch,
   // red = needs action, blue = informational, grey = insufficient data.
   const incidentPct = scope.length ? Math.round(scopeIncidents.length/scope.length*100) : 0;
