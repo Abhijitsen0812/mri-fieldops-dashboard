@@ -206,6 +206,10 @@ button,input,select,textarea{font-family:inherit;}
 /* v1.2.0 — KPI card status row: foot container, status pills, thin progress bar.
    Replaces decorative v1.2.0-2b sparklines with operational indicators. */
 .kpi-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:6px;min-height:18px;}
+/* v1.2.0 — graceful ellipsis on KPI foot secondary text (right of pill).
+   Prevents overflow clip on narrow mobile widths (≤420px) when "Action Required"
+   or "Avg. Resolution" pills + secondary metric exceed card width. */
+.kpi-foot > span:not(.kpi-status){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 .kpi-status{display:inline-flex;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:var(--radius-pill);font-weight:600;white-space:nowrap;}
 .kpi-status.good{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2);}
 .kpi-status.warn{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.2);}
