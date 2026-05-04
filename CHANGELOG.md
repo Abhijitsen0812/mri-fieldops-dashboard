@@ -38,6 +38,15 @@ Phase 2 of the staging audit roadmap. Six sub-phases shipped together: sortable 
 
 ---
 
+## [1.1.0-db.0002] — 2026-05-03
+
+Database-layer security hardening for `audit_log`. No app code or VERSION changed.
+
+### Security
+- Security: made audit_log append-only at the database layer by blocking UPDATE and DELETE for anon/authenticated roles while preserving INSERT and SELECT.
+
+---
+
 ## [1.1.0] — 2026-04-28
 
 Phase 1 of the staging audit roadmap (`docs/STAGING_AUDIT_2026-04-26.md`). Three sub-phases shipped together: design system foundation, accessibility floor, and hash routing + IA merge. View-layer architecture upgrade — no schema or auth changes.
