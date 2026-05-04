@@ -203,6 +203,64 @@ button,input,select,textarea{font-family:inherit;}
 .kpi-delta.up{color:var(--green);}
 .kpi-delta.down{color:var(--red);}
 .kpi-delta.warn{color:var(--amber);}
+/* v1.2.0 — KPI card status row: foot container, status pills, thin progress bar.
+   Replaces decorative v1.2.0-2b sparklines with operational indicators. */
+.kpi-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:6px;min-height:18px;}
+/* v1.2.0 — graceful ellipsis on KPI foot secondary text (right of pill).
+   Prevents overflow clip on narrow mobile widths (≤420px) when "Action Required"
+   or "Avg. Resolution" pills + secondary metric exceed card width. */
+.kpi-foot > span:not(.kpi-status){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.kpi-status{display:inline-flex;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:var(--radius-pill);font-weight:600;white-space:nowrap;}
+.kpi-status.good{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2);}
+.kpi-status.warn{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.2);}
+.kpi-status.risk{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.2);}
+.kpi-status.info{background:rgba(59,130,246,.10);color:var(--brand);border:1px solid rgba(59,130,246,.18);}
+.kpi-status.muted{background:rgba(148,163,184,.14);color:var(--text-dim);border:1px solid rgba(148,163,184,.2);}
+.kpi-bar-track{height:3px;background:rgba(148,163,184,.15);border-radius:2px;margin:6px 0 2px;overflow:hidden;}
+.kpi-bar-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+/* v1.2.0 2d — global search. Topbar input + absolute dropdown panel. */
+.global-search{position:relative;display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-md);padding:5px 8px;width:280px;max-width:35%;flex-shrink:1;transition:border-color .15s,box-shadow .15s;}
+.global-search:focus-within{border-color:var(--brand);box-shadow:var(--focus-ring);}
+.global-search-icon{width:14px;height:14px;color:var(--text-faint);flex-shrink:0;}
+.global-search-input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;font-family:var(--sans);padding:0;}
+.global-search-input::placeholder{color:var(--text-faint);}
+.global-search-input::-webkit-search-cancel-button{display:none;}
+.global-search-kbd{font-family:var(--mono);font-size:10px;color:var(--text-faint);background:var(--surface3);border:1px solid var(--border);border-radius:3px;padding:1px 5px;flex-shrink:0;}
+.global-search-results{position:fixed;top:54px;right:18px;width:420px;max-width:calc(100vw - 36px);max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-4);z-index:200;}
+.global-search-section{padding:6px 4px;}
+.global-search-section-label{font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:8px 12px 4px;}
+.global-search-result{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:var(--radius-sm);margin:0 6px;color:var(--text-dim);transition:background .12s,color .12s;}
+.global-search-result:hover,.global-search-result.is-active{background:var(--surface2);color:var(--text);}
+.global-search-result svg{width:14px;height:14px;color:var(--text-faint);flex-shrink:0;}
+.global-search-result .gs-primary{font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.global-search-result .gs-secondary{font-size:10px;color:var(--text-faint);font-family:var(--mono);flex-shrink:0;}
+.global-search-result mark{background:rgba(59,130,246,.25);color:var(--text);padding:0 2px;border-radius:2px;}
+.global-search-empty{padding:18px 16px;text-align:center;font-size:12px;color:var(--text-faint);}
+@media (max-width: 900px){
+  .global-search{display:none;}
+}
+/* v1.2.0 2e — empty states. Used inside tbody (colspan) and inline.
+   The variant=success tone (green icon) celebrates a clean queue; the
+   default neutral tone signals filter-narrowed-too-far. */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;color:var(--text-dim);}
+.empty-state svg{width:32px;height:32px;margin-bottom:12px;stroke-width:1.5;}
+.empty-state-headline{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.empty-state-secondary{font-size:12px;color:var(--text-faint);max-width:360px;line-height:1.5;}
+.empty-state-row td{border-bottom:none !important;}
+.empty-state-row:hover td{background:transparent !important;}
+/* v1.2.0 2c — Reports collapsible at the bottom of Dashboard. */
+.reports-details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;margin-top:18px;}
+.reports-details > summary{cursor:pointer;list-style:none;padding:14px 18px;display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:13px;font-weight:500;user-select:none;transition:color .15s,background .15s;}
+.reports-details > summary::-webkit-details-marker{display:none;}
+.reports-details > summary:hover{color:var(--text);background:var(--surface2);}
+.reports-details > summary:focus-visible{outline:none;box-shadow:var(--focus-ring);}
+.reports-details > summary svg{width:16px;height:16px;color:var(--text-dim);flex-shrink:0;}
+.reports-summary-label{flex:1;}
+.reports-summary-toggle::before{content:'+';font-family:var(--mono);font-size:14px;color:var(--text-faint);transition:transform .15s;}
+.reports-details[open] > summary > .reports-summary-toggle::before{content:'−';}
+.reports-body{padding:8px 18px 18px;border-top:1px solid var(--border);}
+.reports-body .panel{margin-bottom:0;}
+.reports-body .grid-2{margin-bottom:14px;}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;}
 .panel-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 /* h2.panel-title (v1.1.0 1b a11y): heading hierarchy promotion. The * reset
@@ -214,7 +272,15 @@ button,input,select,textarea{font-family:inherit;}
 .panel-action{font-size:11px;color:var(--brand);cursor:pointer;font-weight:600;}
 .panel-body{padding:16px 18px;}
 .data-table{width:100%;border-collapse:collapse;}
-.data-table th{text-align:left;font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:0 12px 10px;border-bottom:1px solid var(--border);}
+.data-table thead th{text-align:left;font-family:var(--mono);font-size:9px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:5;}
+/* v1.2.0 2a — sortable column headers. Click to toggle sort direction.
+   Default cursor stays auto so non-sortable columns don't false-advertise. */
+.data-table thead th.sortable{cursor:pointer;user-select:none;transition:color .12s,background .12s;}
+.data-table thead th.sortable:hover{color:var(--text-dim);background:var(--surface2);}
+.data-table thead th.sortable:focus-visible{outline:none;box-shadow:var(--focus-ring);}
+.data-table thead th .sort-chevron{display:inline-block;margin-left:6px;opacity:.25;color:var(--text-faint);font-size:9px;letter-spacing:0;transition:opacity .12s,color .12s,transform .12s;}
+.data-table thead th.sort-active .sort-chevron{opacity:1;color:var(--brand);}
+.data-table thead th.sort-active.sort-desc .sort-chevron{transform:rotate(180deg);}
 .data-table td{padding:10px 12px;border-bottom:1px solid rgba(36,48,68,.5);font-size:12px;vertical-align:middle;}
 .data-table tr:last-child td{border-bottom:none;}
 .data-table tr:hover td{background:var(--surface2);}
@@ -686,7 +752,9 @@ button,input,select,textarea{font-family:inherit;}
     <div class="nav-section" role="presentation">Analysis</div>
     <div class="nav-item admin-only" data-page="ambiguities" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="alert-triangle"></i></span> Flags &amp; Ambiguities <span class="nav-badge amber" id="nb-amb" style="display:none"></span></div>
     <div class="nav-item mgr-plus" data-page="engperf" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="award"></i></span> Engineer Performance</div>
-    <div class="nav-item" data-page="reports" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="bar-chart-3"></i></span> Reports</div>
+    <!-- v1.2.0 2c — Reports nav-item removed. Reports panels are folded
+         into Dashboard as a collapsible. /#/reports still resolves via
+         the navigate() redirect for legacy bookmarks. -->
     <div class="nav-item superadmin-only" data-page="auditlog" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="shield"></i></span> Audit Log</div>
     <div class="nav-item" data-page="about" role="button" tabindex="0"><span class="nav-icon"><i data-lucide="info"></i></span> About</div>
   </nav>
@@ -703,6 +771,23 @@ button,input,select,textarea{font-family:inherit;}
 <header class="topbar">
   <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
   <div class="topbar-title" id="topbar-title">Dashboard</div>
+  <!-- v1.2.0 2d — global search. Input + dropdown of results spanning
+       tickets, customers, engineers, and PM schedules. Cmd/Ctrl+K focuses. -->
+  <div class="global-search" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-owns="global-search-results">
+    <i data-lucide="search" class="global-search-icon" aria-hidden="true"></i>
+    <input
+      type="search"
+      id="global-search-input"
+      class="global-search-input"
+      placeholder="Search tickets, customers, engineers… (⌘K)"
+      aria-label="Global search"
+      aria-autocomplete="list"
+      aria-controls="global-search-results"
+      autocomplete="off"
+    >
+    <kbd class="global-search-kbd" aria-hidden="true">⌘K</kbd>
+  </div>
+  <div id="global-search-results" class="global-search-results" role="listbox" aria-label="Search results" hidden></div>
   <div id="env-pill" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;background:#f59e0b;color:#000;box-shadow:0 0 0 1px #b45309 inset" title="You are on the STAGING environment. Data here is isolated from production.">STAGING</div>
   <div class="static-dataset-label" id="dataset-label">DATASET · OCT 2025 – MAR 2026</div>
   <input type="file" id="xlsx-upload" accept=".xlsx" aria-label="Upload service operations XLSX file" style="display:none" class="admin-only" onchange="handleXLSXUpload(event)">
@@ -782,6 +867,43 @@ button,input,select,textarea{font-family:inherit;}
     <div class="panel-head"><h2 class="panel-title" id="kpi-band-title"><i data-lucide="gauge"></i>Live KPIs</h2></div>
     <div class="panel-body"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:20px;text-align:center" id="kpi-band"></div></div>
   </div>
+
+  <!-- v1.2.0 2c — Reports folded into Dashboard. Collapsed by default so the
+       dashboard doesn't bloat; expand to see KPI Summary, Parts Failures,
+       and Customer Call Frequency. The previous /#/reports nav entry is
+       gone; legacy /#/reports URLs redirect to /#/dashboard. -->
+  <details class="reports-details">
+    <summary>
+      <i data-lucide="bar-chart-3"></i>
+      <span class="reports-summary-label">Reports — KPI Summary, Parts Failures, Customer Frequency</span>
+      <span class="reports-summary-toggle"></span>
+    </summary>
+    <div class="reports-body">
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px" class="export-btn-row">
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="exportReportsCSV()" title="Export KPI + customer frequency to CSV"><i data-lucide="download"></i>Export CSV</button>
+        <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="printCurrentPage('Reports')" title="Print / Save as PDF"><i data-lucide="printer"></i>Print / PDF</button>
+      </div>
+      <div class="grid-2 g-1-1">
+        <div class="panel">
+          <div class="panel-head"><h3 class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</h3></div>
+          <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3 class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</h3></div>
+          <div class="panel-body"><div class="bar-chart-wrap" id="bar-parts" style="height:180px"></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3 class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</h3></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
+            <tbody id="customer-freq-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </details>
 </div>
 
 <!-- ██ SERVICE HISTORY ██ -->
@@ -802,12 +924,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>TICKET ID</th><th>MONTH</th><th>CUSTOMER</th><th>MODEL</th>
-          <th>CALL TYPE</th><th>SYS STATUS</th><th>ISSUE</th>
-          <th>CALL DATE</th><th>ATTENDED</th><th>ENGINEER</th>
-          <th>PARTS</th><th>SYS UP</th><th>STATUS</th>
-        </tr></thead>
+        <thead><tr id="history-thead-row"></tr></thead>
         <tbody id="history-body"></tbody>
       </table>
     </div>
@@ -850,11 +967,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>ID</th><th>CUSTOMER</th><th>PLACE</th><th>MODEL</th><th>CONTRACT</th>
-          <th>FREQ</th><th>LAST PMS</th><th>NEXT DUE</th><th>WINDOW</th>
-          <th>ENGINEERS</th><th>STATUS</th><th class="pm-action-col">ACTION</th>
-        </tr></thead>
+        <thead><tr id="pm-thead-row"></tr></thead>
         <tbody id="pm-body"></tbody>
       </table>
     </div>
@@ -899,12 +1012,7 @@ button,input,select,textarea{font-family:inherit;}
     </div>
     <div style="overflow-x:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>CUST CODE</th><th>CUSTOMER</th><th>TOWN</th><th>STATE</th>
-          <th>MODEL</th><th>MODALITY</th><th>CHANNEL</th><th>GRADIENT</th><th>SW VER</th>
-          <th>COMPRESSOR</th><th>COLDHEAD</th><th>CONTRACT</th><th>CMC START</th><th>CMC END</th>
-          <th>TOTAL CALLS</th><th>OPEN CALLS</th>
-        </tr></thead>
+        <thead><tr id="assets-thead-row"></tr></thead>
         <tbody id="asset-body"></tbody>
       </table>
     </div>
@@ -960,31 +1068,13 @@ button,input,select,textarea{font-family:inherit;}
 </div>
 
 <!-- ██ REPORTS ██ -->
-<div class="page" id="page-reports">
-  <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px" class="export-btn-row">
-    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="exportReportsCSV()" title="Export KPI + customer frequency to CSV"><i data-lucide="download"></i>Export CSV</button>
-    <button class="btn btn-ghost export-btn" style="font-size:11px;padding:6px 12px" onclick="printCurrentPage('Reports')" title="Print / Save as PDF"><i data-lucide="printer"></i>Print / PDF</button>
-  </div>
-  <div class="grid-2 g-1-1">
-    <div class="panel">
-      <div class="panel-head"><h2 class="panel-title"><i data-lucide="bar-chart-3"></i>KPI Summary — Full Period</h2></div>
-      <div class="panel-body"><div id="report-kpi-table" style="overflow-x:auto"></div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-head"><h2 class="panel-title"><i data-lucide="wrench"></i>Parts &amp; Component Failures</h2></div>
-      <div class="panel-body"><div class="bar-chart-wrap" id="bar-parts" style="height:180px"></div></div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h2 class="panel-title"><i data-lucide="clipboard-list"></i>Customer Call Frequency</h2></div>
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead><tr><th>CUSTOMER</th><th>TOTAL CALLS</th><th>INCIDENTS</th><th>PMS</th><th>OPEN</th><th>CONTRACT</th></tr></thead>
-        <tbody id="customer-freq-body"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+<!-- v1.2.0 2c — page-reports is intentionally empty. The three Reports
+     panels (KPI Summary, Parts Failures, Customer Frequency) moved into
+     Dashboard as a collapsible <details>. The page id is kept so that
+     code paths that still reference 'page-reports' don't crash; the
+     navigate('reports') redirect routes legacy callers (and bookmarked
+     /#/reports URLs) to /#/dashboard. -->
+<div class="page" id="page-reports" hidden></div>
 
 <!-- ██ AUDIT LOG (superadmin-only) ██ -->
 <!-- ENGINEER PERFORMANCE — admin + manager only -->
@@ -1052,9 +1142,7 @@ button,input,select,textarea{font-family:inherit;}
     <div style="padding:10px 18px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border)" id="audit-summary">Loading…</div>
     <div style="overflow-x:auto;max-height:70vh;overflow-y:auto">
       <table class="data-table">
-        <thead><tr>
-          <th>WHEN</th><th>USER</th><th>ACTION</th><th>DETAILS</th>
-        </tr></thead>
+        <thead><tr id="audit-thead-row"></tr></thead>
         <tbody id="audit-body"></tbody>
       </table>
     </div>
@@ -1161,8 +1249,8 @@ button,input,select,textarea{font-family:inherit;}
 // ══════════════════════════════════════════
 // APP VERSION — baseline released 2026-04-24
 // ══════════════════════════════════════════
-window.APP_VERSION = '1.1.0';
-window.APP_BUILD   = { version: '1.1.0', released: '2026-04-28', tag: 'v1.1.0' };
+window.APP_VERSION = '1.2.0';
+window.APP_BUILD   = { version: '1.2.0', released: '2026-05-04', tag: 'v1.2.0' };
 
 // ══════════════════════════════════════════
 // LUCIDE ICON RENDER HOOK (v1.1.0 1a)
@@ -1180,6 +1268,90 @@ window.refreshIcons = function refreshIcons(){
     window.lucide.createIcons({ attrs: { class: 'lucide-icon', 'aria-hidden': 'true' } });
   } catch (e) { /* ignore */ }
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// SORTABLE TABLES (v1.2.0 sub-phase 2a)
+// ══════════════════════════════════════════════════════════════════════
+// Generic per-table sort state + helpers. Each table that wants sorting
+// registers a config via `registerSortable(tableId, columns, defaults, rerender)`,
+// then calls `applySort(tableId, rows)` inside its render function before
+// innerHTML assignment, and `renderSortableHeaders(tableId)` to populate
+// the <thead> with click-to-sort headers.
+//
+// columns: [{ key:'call_date', label:'CALL DATE', accessor: t => t._callDate, type:'date' }]
+//   - key:      identifier for this column (used in sort state)
+//   - label:    text shown in <th>
+//   - accessor: row → comparable value (Date / number / string / null)
+//   - type:     'date' | 'number' | 'string' (default) — affects null handling
+//   - sortable: if false, column appears as a static <th> with no click affordance
+//   - thAttrs:  optional extra attrs for the <th> (e.g. for ACTION which is hidden for engineers)
+// ─────────────────────────────────────────────────────────────────────
+
+const _sortConfigs = {};   // tableId → { columns, defaults, rerender }
+const _sortState   = {};   // tableId → { col, dir }
+
+function registerSortable(tableId, columns, defaults, rerender){
+  _sortConfigs[tableId] = { columns, defaults, rerender };
+  if(!_sortState[tableId]) _sortState[tableId] = { ...defaults };
+}
+
+function _compareSortable(a, b, dir){
+  // null/undefined sort to bottom regardless of direction (stable contract).
+  const aNull = a == null || (typeof a === 'number' && Number.isNaN(a));
+  const bNull = b == null || (typeof b === 'number' && Number.isNaN(b));
+  if(aNull && bNull) return 0;
+  if(aNull) return 1;
+  if(bNull) return -1;
+  const sign = dir === 'asc' ? 1 : -1;
+  if(a < b) return -1 * sign;
+  if(a > b) return  1 * sign;
+  return 0;
+}
+
+function applySort(tableId, rows){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg || !st) return rows;
+  const col = cfg.columns.find(c => c.key === st.col);
+  if(!col || col.accessor === undefined) return rows;
+  return [...rows].sort((a, b) => _compareSortable(col.accessor(a), col.accessor(b), st.dir));
+}
+
+function setSort(tableId, key){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg || !st) return;
+  const col = cfg.columns.find(c => c.key === key);
+  if(!col || col.sortable === false) return;
+  if(st.col === key){
+    st.dir = st.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    st.col = key;
+    // First click defaults to whatever the column's defaultDir says, else 'asc'.
+    st.dir = col.defaultDir || 'asc';
+  }
+  if(typeof cfg.rerender === 'function') cfg.rerender();
+}
+
+function renderSortableHeaders(tableId){
+  const cfg = _sortConfigs[tableId];
+  const st  = _sortState[tableId];
+  if(!cfg) return '';
+  const html = cfg.columns.map(c => {
+    const sortable = c.sortable !== false;
+    const isActive = sortable && st.col === c.key;
+    const cls = ['sortable', isActive ? 'sort-active' : '', isActive ? `sort-${st.dir}` : '']
+      .filter(Boolean)
+      .join(' ');
+    const ariaSort = isActive ? (st.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    const attrs = c.thAttrs || '';
+    if(!sortable){
+      return `<th ${attrs}>${c.label}</th>`;
+    }
+    return `<th ${attrs} class="${cls}" role="columnheader" tabindex="0" aria-sort="${ariaSort}" onclick="setSort('${tableId}','${c.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setSort('${tableId}','${c.key}')}">${c.label}<span class="sort-chevron" aria-hidden="true">▼</span></th>`;
+  }).join('');
+  return html;
+}
 
 // ══════════════════════════════════════════
 // SCREEN-READER ANNOUNCEMENTS (v1.1.0 1b a11y)
@@ -3002,7 +3174,7 @@ function normalisePart(raw){
 // ══════════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════════
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const APP_RELEASE_DATE = '28 April 2026';
 const PAGE_TITLES={dashboard:'Dashboard',tickets:'Service History',open:'Open Tickets',pm:'PM Schedules',assets:'Install Base',team:'Field Team',ambiguities:'Flags & Ambiguities',engperf:'Engineer Performance',reports:'Reports',auditlog:'Audit Log',about:'About'};
 const _VALID_PAGES = new Set(Object.keys(PAGE_TITLES));
@@ -3072,6 +3244,295 @@ function _hydrateFromHash(){
     navigate(page, { fromHash: true, query });
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// EMPTY STATES (v1.2.0 sub-phase 2e)
+// ══════════════════════════════════════════════════════════════════════
+// Generic helper for tables and panels that have nothing to show. Renders
+// a centered icon + headline + optional secondary line. Tone:
+//   variant='none'    — neutral grey (no results from filter)
+//   variant='success' — green (clean queue, all clear)
+// Used inside <tbody> via colspan to span all columns; for non-table
+// containers, drop the `<tr><td colspan>` wrapper by passing inline=true.
+function _emptyStateHtml({ icon='inbox', headline='No results', secondary='', variant='none', colspan=1, inline=false } = {}){
+  const tone = variant === 'success' ? 'var(--success)' : 'var(--text-faint)';
+  const inner = `<div class="empty-state" data-variant="${variant}">
+    <i data-lucide="${esc(icon)}" aria-hidden="true" style="color:${tone}"></i>
+    <div class="empty-state-headline">${esc(headline)}</div>
+    ${secondary ? `<div class="empty-state-secondary">${esc(secondary)}</div>` : ''}
+  </div>`;
+  if(inline) return inner;
+  return `<tr class="empty-state-row"><td colspan="${colspan}">${inner}</td></tr>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GLOBAL SEARCH (v1.2.0 sub-phase 2d)
+// ══════════════════════════════════════════════════════════════════════
+// Single search field in the topbar that indexes the four primary entity
+// types and routes the user to the right page (or detail modal) on click.
+//   - Cmd/Ctrl+K focuses the input from anywhere in the app.
+//   - ↑/↓ navigates results, Enter opens, Esc closes/clears.
+//   - Hits: top 6 tickets, top 5 customers, all engineers, top 5 PMs.
+//   - Uses substring match (case-insensitive) with simple ranking.
+// ─────────────────────────────────────────────────────────────────────
+
+let _searchActiveIndex = 0;
+let _searchResults = [];
+
+function _highlight(text, q){
+  if(!text || !q) return esc(text || '');
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if(idx === -1) return esc(text);
+  return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + q.length)) + '</mark>' + esc(text.slice(idx + q.length));
+}
+
+function _gsScore(haystack, q){
+  // 0 = no match. Higher = better. Exact-prefix beats substring beats none.
+  if(!haystack) return 0;
+  const h = haystack.toLowerCase();
+  const ql = q.toLowerCase();
+  if(h === ql) return 100;
+  if(h.startsWith(ql)) return 70;
+  const idx = h.indexOf(ql);
+  if(idx === -1) return 0;
+  return Math.max(10, 50 - idx);  // earlier match = higher score
+}
+
+function _searchAll(q){
+  if(!q || q.trim().length < 2) return [];
+  const ql = q.trim().toLowerCase();
+  const results = [];
+
+  // Tickets — score on id, customer, issue, engineer
+  const tixMatches = [];
+  if(typeof RAW_TICKETS !== 'undefined' && Array.isArray(RAW_TICKETS)){
+    for(const t of RAW_TICKETS){
+      const s = Math.max(
+        _gsScore(t.id, ql),
+        _gsScore(t.customer, ql),
+        _gsScore(t.issue, ql) * 0.7,
+        _gsScore(t.engineer, ql) * 0.6,
+      );
+      if(s > 0) tixMatches.push({ score: s, item: t });
+    }
+    tixMatches.sort((a,b) => b.score - a.score);
+    for(const m of tixMatches.slice(0, 6)){
+      const t = m.item;
+      results.push({
+        category: 'Ticket',
+        icon: 'ticket',
+        primary: `${t.id} — ${t.customer || ''}`,
+        secondary: t.month || '',
+        primaryHighlightSrc: `${t.id} — ${t.customer || ''}`,
+        action: () => { openDetail(t.id); _closeSearch(); },
+      });
+    }
+  }
+
+  // Customers / Assets
+  const assetMatches = [];
+  if(typeof CONFIG_ASSETS !== 'undefined' && Array.isArray(CONFIG_ASSETS)){
+    for(const a of CONFIG_ASSETS){
+      const s = Math.max(
+        _gsScore(a.code, ql),
+        _gsScore(a.name, ql),
+        _gsScore(a.town, ql) * 0.7,
+        _gsScore(a.model, ql) * 0.6,
+      );
+      if(s > 0) assetMatches.push({ score: s, item: a });
+    }
+    assetMatches.sort((a,b) => b.score - a.score);
+    for(const m of assetMatches.slice(0, 5)){
+      const a = m.item;
+      results.push({
+        category: 'Customer',
+        icon: 'building-2',
+        primary: `${a.code} — ${a.name || ''}`,
+        secondary: a.town || '',
+        primaryHighlightSrc: `${a.code} — ${a.name || ''}`,
+        action: () => {
+          navigate('assets');
+          _closeSearch();
+          // Best-effort: prefill the asset search box if it exists.
+          const box = document.querySelector('#page-assets input.search-box');
+          if(box){ box.value = a.code; if(typeof filterAssets === 'function') filterAssets(a.code); }
+        },
+      });
+    }
+  }
+
+  // Engineers
+  const engMatches = [];
+  if(typeof ENGINEERS !== 'undefined' && Array.isArray(ENGINEERS)){
+    for(const e of ENGINEERS){
+      const s = Math.max(
+        _gsScore(e.name, ql),
+        _gsScore(e.region, ql) * 0.6,
+        _gsScore(e.email, ql) * 0.5,
+      );
+      if(s > 0) engMatches.push({ score: s, item: e });
+    }
+    engMatches.sort((a,b) => b.score - a.score);
+    for(const m of engMatches){
+      const e = m.item;
+      results.push({
+        category: 'Engineer',
+        icon: 'users',
+        primary: e.name,
+        secondary: e.region || '',
+        primaryHighlightSrc: e.name,
+        action: () => { navigate('team'); _closeSearch(); },
+      });
+    }
+  }
+
+  // PM Schedules
+  const pmMatches = [];
+  if(typeof PM_SCHEDULE !== 'undefined' && Array.isArray(PM_SCHEDULE)){
+    for(const pm of PM_SCHEDULE){
+      const s = Math.max(
+        _gsScore(pm.id, ql),
+        _gsScore(pm.customer, ql),
+        _gsScore(pm.town, ql) * 0.7,
+        _gsScore(pm.model, ql) * 0.6,
+      );
+      if(s > 0) pmMatches.push({ score: s, item: pm });
+    }
+    pmMatches.sort((a,b) => b.score - a.score);
+    for(const m of pmMatches.slice(0, 5)){
+      const pm = m.item;
+      results.push({
+        category: 'PM',
+        icon: 'calendar-clock',
+        primary: `${pm.id} — ${pm.customer || ''}`,
+        secondary: pm.nextPMS || '',
+        primaryHighlightSrc: `${pm.id} — ${pm.customer || ''}`,
+        action: () => { navigate('pm'); _closeSearch(); },
+      });
+    }
+  }
+
+  // Apply highlight markup once at the end
+  for(const r of results){
+    r.primaryHtml = _highlight(r.primaryHighlightSrc, q.trim());
+  }
+  return results;
+}
+
+function _renderSearchResults(q){
+  const dropdown = document.getElementById('global-search-results');
+  const combobox = document.querySelector('.global-search');
+  if(!dropdown || !combobox) return;
+  if(!q || q.trim().length < 2){
+    dropdown.hidden = true;
+    combobox.setAttribute('aria-expanded', 'false');
+    _searchResults = [];
+    return;
+  }
+  _searchResults = _searchAll(q);
+  if(_searchResults.length === 0){
+    dropdown.innerHTML = `<div class="global-search-empty">No matches for "${esc(q)}"</div>`;
+    dropdown.hidden = false;
+    combobox.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  // Group by category
+  const groups = {};
+  _searchResults.forEach((r, i) => {
+    if(!groups[r.category]) groups[r.category] = [];
+    groups[r.category].push({ ...r, _idx: i });
+  });
+  let html = '';
+  for(const [cat, items] of Object.entries(groups)){
+    html += `<div class="global-search-section"><div class="global-search-section-label">${esc(cat)}</div>`;
+    for(const r of items){
+      const isActive = r._idx === _searchActiveIndex;
+      html += `<div class="global-search-result${isActive ? ' is-active' : ''}" role="option" aria-selected="${isActive}" data-index="${r._idx}">
+        <i data-lucide="${r.icon}" aria-hidden="true"></i>
+        <span class="gs-primary">${r.primaryHtml}</span>
+        <span class="gs-secondary">${esc(r.secondary)}</span>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  dropdown.innerHTML = html;
+  dropdown.hidden = false;
+  combobox.setAttribute('aria-expanded', 'true');
+  if(window.refreshIcons) window.refreshIcons();
+  // Wire click on each result
+  dropdown.querySelectorAll('.global-search-result').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.index, 10);
+      const r = _searchResults[idx];
+      if(r && typeof r.action === 'function') r.action();
+    });
+  });
+}
+
+function _closeSearch(){
+  const input = document.getElementById('global-search-input');
+  const dropdown = document.getElementById('global-search-results');
+  const combobox = document.querySelector('.global-search');
+  if(input) input.value = '';
+  if(dropdown){ dropdown.hidden = true; dropdown.innerHTML = ''; }
+  if(combobox) combobox.setAttribute('aria-expanded', 'false');
+  _searchResults = [];
+  _searchActiveIndex = 0;
+}
+
+(function _wireGlobalSearch(){
+  // Cmd/Ctrl+K focuses the search from anywhere in the app.
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'){
+      e.preventDefault();
+      const input = document.getElementById('global-search-input');
+      if(input){ input.focus(); input.select(); }
+    }
+  });
+  // Defer until DOMContentLoaded so the input element exists.
+  function attach(){
+    const input = document.getElementById('global-search-input');
+    if(!input) return;
+    let debounce;
+    input.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        _searchActiveIndex = 0;
+        _renderSearchResults(input.value);
+      }, 80);
+    });
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape'){ _closeSearch(); input.blur(); }
+      else if(e.key === 'ArrowDown'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        _searchActiveIndex = (_searchActiveIndex + 1) % _searchResults.length;
+        _renderSearchResults(input.value);
+      } else if(e.key === 'ArrowUp'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        _searchActiveIndex = (_searchActiveIndex - 1 + _searchResults.length) % _searchResults.length;
+        _renderSearchResults(input.value);
+      } else if(e.key === 'Enter'){
+        if(_searchResults.length === 0) return;
+        e.preventDefault();
+        const r = _searchResults[_searchActiveIndex];
+        if(r && typeof r.action === 'function') r.action();
+      }
+    });
+    // Close when focus leaves the search area entirely (small delay to allow click)
+    document.addEventListener('click', (e) => {
+      const sb = document.querySelector('.global-search');
+      const dd = document.getElementById('global-search-results');
+      if(!sb || !dd) return;
+      if(!sb.contains(e.target) && !dd.contains(e.target)){ _closeSearch(); }
+    });
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', attach);
+  } else { attach(); }
+})();
 const SUPERADMIN_EMAIL = 'abhijit.s@3imedtech.com';
 // Cache the currently-active nav item + page so navigate() only has to flip
 // two class toggles, never querySelectorAll across the whole document.
@@ -3084,6 +3545,11 @@ function navigate(page, opts = {}){
   if(page === 'open'){
     page = 'tickets';
     opts = { ...opts, query: { ...(opts.query||{}), status: 'open' } };
+  }
+  // v1.2.0 2c: Reports page deleted; folded into Dashboard as a collapsible.
+  // Legacy /#/reports bookmarks redirect to /#/dashboard.
+  if(page === 'reports'){
+    page = 'dashboard';
   }
   // Viewers cannot access the Flags & Ambiguities page
   if(page==='ambiguities' && _userRole!=='admin'){
@@ -3356,6 +3822,15 @@ function renderAlertBanner(){
   if (window.refreshIcons) window.refreshIcons();
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// DASHBOARD KPI GRID (v1.2.0 — operational status indicators)
+// ══════════════════════════════════════════════════════════════════════
+// v1.2.0 sub-phase 2b SVG sparklines were replaced with status pills and
+// thin progress bars. Decorative trend lines were not driving operator
+// decisions; the new indicators (status pill + secondary metric + bar)
+// answer "is this card OK or do I need to act?" at a glance.
+// ─────────────────────────────────────────────────────────────────────
+
 function renderKPIGrid(){
   const scope = filteredTickets();
   const scopeOpen = scope.filter(isOpen);
@@ -3402,25 +3877,80 @@ function renderKPIGrid(){
   // Lock indicator for non-filterable cards
   const lockTag = `<span style="font-family:var(--mono);font-size:8px;color:var(--text-faint);letter-spacing:1px">· ALL TIME</span>`;
 
+  // v1.2.0 — derived status logic for KPI foot rows. Pure display, no
+  // calculation changes. Each card answers: green = OK, amber = watch,
+  // red = needs action, blue = informational, grey = insufficient data.
+  const incidentPct = scope.length ? Math.round(scopeIncidents.length/scope.length*100) : 0;
+  const incidentStatus = incidentPct > 40 ? 'risk' : incidentPct > 25 ? 'warn' : 'good';
+  const incidentStatusLabel = incidentPct > 40 ? 'High Ratio' : incidentPct > 25 ? 'Watch' : 'Normal';
+  const pmPct = scope.length ? Math.round(scopePM.length/scope.length*100) : 0;
+  const partsAwaited = OPEN_TICKETS.filter(t => t.parts && t.parts !== 'NA' && t.parts.trim() !== '').length;
+  const openLive = OPEN_TICKETS.length;
+  const openStatus = openLive === 0 ? 'good' : openLive <= 3 ? 'warn' : 'risk';
+  const openStatusLabel = openLive === 0 ? 'All Clear' : 'Action Required';
+  const slaStatus = slaResult.total < 10 ? 'muted' : slaResult.pct >= 90 ? 'good' : slaResult.pct >= 70 ? 'warn' : 'risk';
+  const slaStatusLabel = slaResult.total < 10 ? 'Insuf. Data' : slaResult.pct >= 90 ? 'On Target' : slaResult.pct >= 70 ? 'At Risk' : 'Below Target';
+  const slaBarPct = slaResult.total >= 10 ? slaResult.pct : 0;
+  const slaBarColor = slaStatus === 'good' ? 'var(--green)' : slaStatus === 'warn' ? 'var(--amber)' : slaStatus === 'risk' ? 'var(--red)' : 'var(--text-faint)';
+  const mttrStatus = !mttrResult.avg ? 'muted' : 'info';
+  const mttrStatusLabel = !mttrResult.avg ? 'Insuf. Data' : 'Avg. Resolution';
+  const mttrDetail = !mttrResult.avg
+    ? `${mttrResult.count} ticket${mttrResult.count!==1?'s':''}${filterSuffix}`
+    : mttrResult.outliers > 0
+      ? `${mttrResult.outliers} outlier${mttrResult.outliers!==1?'s':''} excl.`
+      : `${mttrResult.count} ticket${mttrResult.count!==1?'s':''}${filterSuffix}`;
+  const rfStatus = repeatResult.customerCount === 0 ? 'good' : repeatResult.customerCount <= 2 ? 'warn' : 'risk';
+  const rfStatusLabel = repeatResult.customerCount === 0 ? 'No Issues' : 'Attention';
+  const rfPct = repeatResult.totalIncidents > 0 ? Math.round(repeatResult.ticketsInvolved/repeatResult.totalIncidents*100) : 0;
+
   const html = `
-    <div class="kpi-card blue"><div class="kpi-label">Total Service Calls</div><div class="kpi-value blue">${scope.length}</div><div class="kpi-delta">${esc(scopeLabel)}</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Incidents</div><div class="kpi-value red">${scopeIncidents.length}</div><div class="kpi-delta down">${scope.length?Math.round(scopeIncidents.length/scope.length*100):0}% of scope</div></div>
-    <div class="kpi-card green"><div class="kpi-label">PM Calls</div><div class="kpi-value green">${scopePM.length}</div><div class="kpi-delta up">${esc(scopeLabel)}</div></div>
-    <div class="kpi-card amber"><div class="kpi-label">Open Tickets${isFiltered?'':''}</div><div class="kpi-value amber">${scopeOpen.length}</div><div class="kpi-delta warn">${isFiltered?'Opened in '+dashMonthFilter:'Require action now'}</div></div>
-    ${(()=>{ const p=pendingAmbCount(); return `<div class="kpi-card ${p>0?'purple':'green'} admin-only" title="Data flags apply to the entire dataset regardless of filter"><div class="kpi-label">Data Flags ${lockTag}</div><div class="kpi-value ${p>0?'purple':'green'}">${p}</div><div class="kpi-delta ${p>0?'warn':''}">${p>0?'Need your review':'✓ All reviewed'}</div></div>`; })()}
-    <div class="kpi-card cyan" title="Install base doesn't change by month"><div class="kpi-label">Install Base Covered ${lockTag}</div><div class="kpi-value cyan">${CONFIG_ASSETS.length}</div><div class="kpi-delta">Across ${new Set(CONFIG_ASSETS.map(a=>a.town)).size} cities</div></div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total Service Calls</div>
+      <div class="kpi-value blue">${scope.length}</div>
+      <div class="kpi-delta">${esc(scopeLabel)}</div>
+      <div class="kpi-foot"><span class="kpi-status info">${scopeIncidents.length} incident${scopeIncidents.length!==1?'s':''}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${scopePM.length} PM</span></div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Incidents</div>
+      <div class="kpi-value red">${scopeIncidents.length}</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${incidentPct}%;background:var(--red)"></div></div>
+      <div class="kpi-foot"><span class="kpi-status ${incidentStatus}">${incidentStatusLabel}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${incidentPct}% of calls</span></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">PM Calls</div>
+      <div class="kpi-value green">${scopePM.length}</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${pmPct}%;background:var(--green)"></div></div>
+      <div class="kpi-foot"><span class="kpi-status good">Scheduled</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${pmPct}% of calls</span></div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Open Tickets</div>
+      <div class="kpi-value amber">${scopeOpen.length}</div>
+      <div class="kpi-delta warn">${isFiltered?'Opened in '+dashMonthFilter:'Live workload'}</div>
+      <div class="kpi-foot"><span class="kpi-status ${openStatus}">${openStatusLabel}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${partsAwaited} parts pending</span></div>
+    </div>
+    ${(()=>{ const p=pendingAmbCount(); const ps=p>0?'risk':'good'; const pl=p>0?'Review Needed':'Clean'; return `<div class="kpi-card ${p>0?'purple':'green'} admin-only" title="Data flags apply to the entire dataset regardless of filter"><div class="kpi-label">Data Flags ${lockTag}</div><div class="kpi-value ${p>0?'purple':'green'}">${p}</div><div class="kpi-delta ${p>0?'warn':''}">${p>0?'Pending review':'All resolved'}</div><div class="kpi-foot"><span class="kpi-status ${ps}">${pl}</span></div></div>`; })()}
+    <div class="kpi-card cyan" title="Install base doesn't change by month">
+      <div class="kpi-label">Install Base Covered ${lockTag}</div>
+      <div class="kpi-value cyan">${CONFIG_ASSETS.length}</div>
+      <div class="kpi-delta">Across ${new Set(CONFIG_ASSETS.map(a=>a.town)).size} cities</div>
+      <div class="kpi-foot"><span class="kpi-status info">Active Systems</span></div>
+    </div>
     <div class="kpi-card green" title="${slaTooltip}" style="cursor:help">
       <div class="kpi-label">SLA Compliance <span style="font-size:11px;vertical-align:middle">ⓘ</span></div>
-      ${slaVal}${slaSubLabel}
+      ${slaVal}
+      <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${slaBarPct}%;background:${slaBarColor}"></div></div>
+      <div class="kpi-foot"><span class="kpi-status ${slaStatus}">${slaStatusLabel}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${slaResult.total>=10?slaResult.met+'/'+slaResult.total+' tickets':slaResult.total+' tickets'+filterSuffix}</span></div>
     </div>
     <div class="kpi-card cyan" title="${mttrTooltip}" style="cursor:help">
       <div class="kpi-label">MTTR (avg days) <span style="font-size:11px;vertical-align:middle">ⓘ</span></div>
-      ${mttrVal}${mttrSub}
+      ${mttrVal}
+      <div class="kpi-foot"><span class="kpi-status ${mttrStatus}">${mttrStatusLabel}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${mttrDetail}</span></div>
     </div>
     <div class="kpi-card amber" title="${rfTooltip}" style="cursor:help">
       <div class="kpi-label">Repeat Failures ${lockTag}</div>
       <div class="kpi-value amber">${repeatResult.customerCount}</div>
-      <div class="kpi-delta warn">customer${repeatResult.customerCount!==1?'s':''}, ${repeatResult.ticketsInvolved} ticket${repeatResult.ticketsInvolved!==1?'s':''} (45d window)</div>
+      <div class="kpi-delta warn">customer${repeatResult.customerCount!==1?'s':''} · ${repeatResult.ticketsInvolved} ticket${repeatResult.ticketsInvolved!==1?'s':''} (45d window)</div>
+      <div class="kpi-foot"><span class="kpi-status ${rfStatus}">${rfStatusLabel}</span><span style="font-size:10px;color:var(--text-faint);font-family:var(--mono)">${rfPct}% of incidents</span></div>
     </div>
   `;
   const grid = document.getElementById('kpi-grid');
@@ -3429,6 +3959,16 @@ function renderKPIGrid(){
 }
 
 function renderDashOpen(){
+  // v1.2.0 2e — celebrate the rare zero-open-tickets state with a green
+  // empty-state banner instead of a blank table.
+  if(OPEN_TICKETS.length === 0){
+    document.getElementById('dash-open-body').innerHTML = _emptyStateHtml({
+      icon:'check-circle-2', headline:'All clear — no open tickets', variant:'success',
+      colspan:7, secondary:'Every ticket in scope is closed. Nothing pending action right now.',
+    });
+    if(window.refreshIcons) window.refreshIcons();
+    return;
+  }
   document.getElementById('dash-open-body').innerHTML=OPEN_TICKETS.map(t=>`
     <tr class="clickable" onclick="openDetail('${t.id}')">
       <td><span class="ticket-id">${t.id}</span></td>
@@ -3843,9 +4383,37 @@ function getFilteredHistoryRows(){
   else if(historyStatusFilter==='closed') rows=rows.filter(isClosed);
   return rows;
 }
+// v1.2.0 2a — Service History column sort. Registered once on first
+// render so the sort state survives subsequent re-renders (filter clicks,
+// realtime reloads, etc.).
+const _HISTORY_SORT_COLS = [
+  { key:'id',          label:'TICKET ID', accessor: t => t.id },
+  { key:'month',       label:'MONTH',     accessor: t => parseFlexDate('01 ' + (t.month||''))?.getTime() ?? null, type:'date' },
+  { key:'customer',    label:'CUSTOMER',  accessor: t => (t.customer||'').toLowerCase() },
+  { key:'model',       label:'MODEL',     accessor: t => (t.model||'').toLowerCase() },
+  { key:'call_type',   label:'CALL TYPE', accessor: t => (t.call_type||'').toLowerCase() },
+  { key:'sys_status',  label:'SYS STATUS',accessor: t => (t.sys_status||'').toLowerCase() },
+  { key:'issue',       label:'ISSUE',     accessor: t => (t.issue||'').toLowerCase() },
+  { key:'call_date',   label:'CALL DATE', accessor: t => t._callDate?.getTime() ?? null, defaultDir:'desc' },
+  { key:'attended',    label:'ATTENDED',  accessor: t => parseFlexDate(t.attended_date)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'engineer',    label:'ENGINEER',  accessor: t => (t.engineer||'').toLowerCase() },
+  { key:'parts',       label:'PARTS',     sortable:false },
+  { key:'sys_up',      label:'SYS UP',    accessor: t => t._upDate?.getTime() ?? null, defaultDir:'desc' },
+  { key:'status',      label:'STATUS',    accessor: t => (t.status||'').toLowerCase() },
+];
+let _historySortInited = false;
+function _initHistorySort(){
+  if(_historySortInited) return;
+  registerSortable('history', _HISTORY_SORT_COLS, { col:'call_date', dir:'desc' }, () => renderHistory());
+  _historySortInited = true;
+}
+
 function renderHistory(){
-  const rows=getFilteredHistoryRows();
-  document.getElementById('history-body').innerHTML=rows.map(t=>`
+  _initHistorySort();
+  const sorted = applySort('history', getFilteredHistoryRows());
+  const theadRow = document.getElementById('history-thead-row');
+  if(theadRow) theadRow.innerHTML = renderSortableHeaders('history');
+  document.getElementById('history-body').innerHTML=sorted.map(t=>`
     <tr class="clickable" onclick="openDetail('${t.id}')">
       <td><span class="ticket-id">${t.id}</span></td>
       <td><span class="month-pill">${t.month}</span></td>
@@ -3861,7 +4429,17 @@ function renderHistory(){
       <td style="font-family:var(--mono);font-size:10px">${t.sys_up_date||'—'}</td>
       <td>${statusBadge(t.status)}</td>
     </tr>`).join('');
-  document.getElementById('history-pag').textContent=`Showing ${rows.length} of ${RAW_TICKETS.length} records`;
+  // v1.2.0 2e — empty state when filters strip everything out.
+  if(sorted.length === 0){
+    document.getElementById('history-body').innerHTML = _emptyStateHtml({
+      icon:'search-x', headline:'No tickets match your filters', colspan:13,
+      secondary: historySearch
+        ? `Try a different search term, or clear the filters above.`
+        : `Try selecting a different month, status, or modality.`,
+    });
+  }
+  document.getElementById('history-pag').textContent=`Showing ${sorted.length} of ${RAW_TICKETS.length} records`;
+  if(window.refreshIcons) window.refreshIcons();
 }
 function filterHistory(v){historySearch=v;renderHistory();}
 function filterHistoryMonth(el,m){
@@ -3918,6 +4496,28 @@ function fmtDate(s){
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 }
 
+// v1.2.0 2a — PM Schedule column sort.
+const _PM_SORT_COLS = [
+  { key:'id',         label:'ID',        accessor: r => r.pm.id },
+  { key:'customer',   label:'CUSTOMER',  accessor: r => (r.pm.customer||'').toLowerCase() },
+  { key:'place',      label:'PLACE',     accessor: r => (r.pm.town||'').toLowerCase() },
+  { key:'model',      label:'MODEL',     accessor: r => (r.pm.model||'').toLowerCase() },
+  { key:'contract',   label:'CONTRACT',  accessor: r => (r.pm.contract||'').toLowerCase() },
+  { key:'freq',       label:'FREQ',      accessor: r => r.pm.freq ?? null },
+  { key:'last_pms',   label:'LAST PMS',  accessor: r => parseFlexDate(r.pm.lastPMS)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'next_due',   label:'NEXT DUE',  accessor: r => parseFlexDate(r.pm.nextPMS)?.getTime() ?? null },
+  { key:'window',     label:'WINDOW',    sortable:false },
+  { key:'engineers',  label:'ENGINEERS', sortable:false },
+  { key:'status',     label:'STATUS',    accessor: r => r.st.priority },  // sort by urgency bucket
+  { key:'action',     label:'ACTION',    sortable:false, thAttrs:'class="pm-action-col"' },
+];
+let _pmSortInited = false;
+function _initPmSort(){
+  if(_pmSortInited) return;
+  registerSortable('pm', _PM_SORT_COLS, { col:'next_due', dir:'asc' }, () => renderPM());
+  _pmSortInited = true;
+}
+
 function renderPM(){
   // ── Overview stats ──────────────────────────────────────────
   const statuses = PM_SCHEDULE.map(pm=>pmStatus(pm));
@@ -3945,7 +4545,13 @@ function renderPM(){
       return true;
     });
   }
-  rows.sort((a,b) => a.st.priority - b.st.priority);
+  // v1.2.0 2a — sortable headers. Default is by next-due ascending so the
+  // "what's due next" question reads off the top. Users can click any column
+  // to override; sort survives filter clicks via _sortState.
+  _initPmSort();
+  const pmTheadRow = document.getElementById('pm-thead-row');
+  if(pmTheadRow) pmTheadRow.innerHTML = renderSortableHeaders('pm');
+  rows = applySort('pm', rows);
 
   document.getElementById('pm-count-label').textContent = PM_SCHEDULE.length;
   document.getElementById('pm-body').innerHTML = rows.map(({pm, st}) => {
@@ -4339,9 +4945,43 @@ function findCmcForAsset(a){
   })||null;
 }
 
+// v1.2.0 2a — Install Base column sort. Per-asset accessors include CMC
+// dates and the live ticket counts so users can answer "which assets have
+// the most open tickets?" or "which CMCs expire next?" by clicking.
+const _ASSETS_SORT_COLS = [
+  { key:'code',       label:'CUST CODE',  accessor: a => a.code },
+  { key:'name',       label:'CUSTOMER',   accessor: a => (a.name||'').toLowerCase() },
+  { key:'town',       label:'TOWN',       accessor: a => (a.town||'').toLowerCase() },
+  { key:'state',      label:'STATE',      accessor: a => (a.state||'').toLowerCase() },
+  { key:'model',      label:'MODEL',      accessor: a => (a.model||'').toLowerCase() },
+  { key:'modality',   label:'MODALITY',   accessor: a => getAssetModality(a) },
+  { key:'channel',    label:'CHANNEL',    accessor: a => (a.channel||'').toLowerCase() },
+  { key:'gradient',   label:'GRADIENT',   accessor: a => (a.gradient||'').toLowerCase() },
+  { key:'sw',         label:'SW VER',     accessor: a => (a.sw||'').toLowerCase() },
+  { key:'compressor', label:'COMPRESSOR', accessor: a => (a.compressor||'').toLowerCase() },
+  { key:'coldhead',   label:'COLDHEAD',   accessor: a => (a.coldhead||'').toLowerCase() },
+  { key:'contract',   label:'CONTRACT',   accessor: a => (findCmcForAsset(a)?.contract || '').toLowerCase() },
+  { key:'cmc_start',  label:'CMC START',  accessor: a => parseFlexDate(findCmcForAsset(a)?.start)?.getTime() ?? null, defaultDir:'desc' },
+  { key:'cmc_end',    label:'CMC END',    accessor: a => parseFlexDate(findCmcForAsset(a)?.end)?.getTime() ?? null },
+  { key:'total_calls',label:'TOTAL CALLS',accessor: a => RAW_TICKETS.filter(t => t.asset_code === a.code).length, defaultDir:'desc' },
+  { key:'open_calls', label:'OPEN CALLS', accessor: a => RAW_TICKETS.filter(t => t.asset_code === a.code && isOpen(t)).length, defaultDir:'desc' },
+];
+let _assetsSortInited = false;
+function _initAssetsSort(){
+  if(_assetsSortInited) return;
+  registerSortable('assets', _ASSETS_SORT_COLS, { col:'code', dir:'asc' }, () => renderAssets(_lastAssetSearch));
+  _assetsSortInited = true;
+}
+let _lastAssetSearch = '';
+
 function renderAssets(search=''){
-  const rows=CONFIG_ASSETS.filter(a=>!search||[a.name,a.town,a.model,a.code].some(v=>v&&v.toLowerCase().includes(search.toLowerCase())));
+  _lastAssetSearch = search;
+  const rows=applySort('assets', CONFIG_ASSETS.filter(a=>!search||[a.name,a.town,a.model,a.code].some(v=>v&&v.toLowerCase().includes(search.toLowerCase()))));
   const unmatchedTickets=RAW_TICKETS.filter(t=>t.unmatched);
+
+  _initAssetsSort();
+  const assetsTheadRow = document.getElementById('assets-thead-row');
+  if(assetsTheadRow) assetsTheadRow.innerHTML = renderSortableHeaders('assets');
 
   // Keep the panel header in sync with the actual asset roster (audit F-12).
   // When searching, show "<filtered>/<total>"; otherwise just the total.
@@ -4375,6 +5015,17 @@ function renderAssets(search=''){
       <td style="font-family:var(--mono);text-align:center;color:${openAssetTickets.length>0?'var(--red)':'var(--green)'}">${openAssetTickets.length}</td>
     </tr>`;
   }).join('');
+
+  // v1.2.0 2e — empty state when search matches nothing.
+  if(rows.length === 0){
+    document.getElementById('asset-body').innerHTML = _emptyStateHtml({
+      icon:'search-x', headline:'No assets match your search', colspan:16,
+      secondary: search
+        ? `Nothing found for "${search}". Check spelling or clear the search.`
+        : 'No assets are configured.',
+    });
+    if(window.refreshIcons) window.refreshIcons();
+  }
 
   // Unmatched row
   if(unmatchedTickets.length>0){
@@ -5542,14 +6193,14 @@ function renderAmbiguities(){
             <option value="Service Manager">Service Manager</option>
           </select>
         </div>
-        <div style="margin-bottom:10px">
-          <label style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px">DECISION</label>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Confirmed Issue"> Confirmed Issue</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="False Positive"> False Positive</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Resolved"> Resolved</label>
+        <fieldset style="margin-bottom:10px;border:none;padding:0;">
+          <legend style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px;padding:0;">DECISION</legend>
+          <div role="radiogroup" aria-label="Review decision" style="display:flex;gap:10px;flex-wrap:wrap">
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Confirmed Issue" aria-label="Confirmed Issue"> Confirmed Issue</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="False Positive" aria-label="False Positive"> False Positive</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="rp-dec-${i}" value="Resolved" aria-label="Resolved"> Resolved</label>
           </div>
-        </div>
+        </fieldset>
         <div style="margin-bottom:10px">
           <label style="font-family:var(--mono);font-size:9px;color:var(--text-faint);display:block;margin-bottom:4px">NOTES (min 30 chars)</label>
           <textarea id="rp-notes-${i}" class="search-box" style="width:100%;height:70px;resize:vertical" placeholder="Describe your review decision…" oninput="checkReviewReady(${i})"></textarea>
@@ -5866,14 +6517,18 @@ setInterval(() => {
 // ══════════════════════════════════════════
 // Page-specific renderers so we can re-run them on navigate
 const PAGE_RENDERERS={
-  dashboard:()=>{renderDashMonthTabs();renderAlertBanner();renderKPIGrid();renderDashOpen();renderDashEngineers();renderRenewals();renderBarMonthly();renderCallTypeChart();renderTopCustomers();renderKPIBand();},
+  // v1.2.0 2c — dashboard now also renders the Reports panels (folded
+  // in as a collapsible). renderReports() targets the same #report-kpi-table /
+  // #bar-parts / #customer-freq-body IDs; they live inside the dashboard
+  // <details> instead of in their own page now.
+  dashboard:()=>{renderDashMonthTabs();renderAlertBanner();renderKPIGrid();renderDashOpen();renderDashEngineers();renderRenewals();renderBarMonthly();renderCallTypeChart();renderTopCustomers();renderKPIBand();renderReports();},
   tickets:()=>{buildHistoryTabs();renderHistory();},
   open:renderOpen,
   pm:renderPM,
   assets:()=>renderAssets(),
   team:renderTeam,
   ambiguities:renderAmbiguities,
-  reports:renderReports,
+  // 'reports' key omitted — navigate('reports') redirects to 'dashboard'.
 };
 // Patch navigate() to call the page renderer each time. The wrapper must
 // forward ALL arguments — v1.1.0 1c added opts={fromHash,query} which
@@ -6381,6 +7036,20 @@ async function logAudit(action, details){
 
 // Audit page state
 let _auditRows = [];
+// v1.2.0 2a — Audit Log column sort.
+const _AUDIT_SORT_COLS = [
+  { key:'when',    label:'WHEN',    accessor: r => r.created_at ? new Date(r.created_at).getTime() : null, defaultDir:'desc' },
+  { key:'user',    label:'USER',    accessor: r => (r.user_email||'').toLowerCase() },
+  { key:'action',  label:'ACTION',  accessor: r => (r.action||'').toLowerCase() },
+  { key:'details', label:'DETAILS', sortable:false },
+];
+let _auditSortInited = false;
+function _initAuditSort(){
+  if(_auditSortInited) return;
+  registerSortable('audit', _AUDIT_SORT_COLS, { col:'when', dir:'desc' }, () => renderAuditLog());
+  _auditSortInited = true;
+}
+
 async function reloadAuditLog(){
   const body = document.getElementById('audit-body');
   const summary = document.getElementById('audit-summary');
@@ -6421,10 +7090,23 @@ function renderAuditLog(){
   if(summary){
     summary.textContent = `Showing ${rows.length} of ${_auditRows.length} most recent events (max 500)`;
   }
+  // Sortable headers always render so that switching filter back to a
+  // populated state doesn't show a stale 'No events…' message above no
+  // headers. Empty-state body is rendered below the header row.
+  _initAuditSort();
+  const auditTheadRow = document.getElementById('audit-thead-row');
+  if(auditTheadRow) auditTheadRow.innerHTML = renderSortableHeaders('audit');
   if(rows.length === 0){
-    body.innerHTML = `<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-faint)">No events match the current filter.</td></tr>`;
+    // v1.2.0 2e — generic empty state, replaces the bespoke one-row stub.
+    body.innerHTML = _emptyStateHtml({
+      icon:'search-x', headline:'No events match the current filter', colspan:4,
+      secondary: 'Adjust the action or user filter above.',
+    });
+    if(window.refreshIcons) window.refreshIcons();
     return;
   }
+  const sortedRows = applySort('audit', rows);
+
   const actionColor = a => {
     if(a === 'login') return 'var(--green)';
     if(a === 'logout') return 'var(--text-dim)';
@@ -6432,7 +7114,7 @@ function renderAuditLog(){
     if(a === 'upload_success') return 'var(--brand)';
     return 'var(--text)';
   };
-  body.innerHTML = rows.map(r => {
+  body.innerHTML = sortedRows.map(r => {
     const when = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
     const details = r.details && typeof r.details === 'object'
       ? Object.entries(r.details).map(([k,v]) => `<span style="color:var(--text-dim)">${esc(k)}:</span> ${esc(typeof v==='string'?v:JSON.stringify(v))}`).join(' · ')

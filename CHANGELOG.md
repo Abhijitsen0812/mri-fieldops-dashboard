@@ -7,6 +7,37 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.2.0] — 2026-05-04
+
+Phase 2 of the staging audit roadmap. Six sub-phases shipped together: sortable tables, dashboard KPI operational indicators, Reports merged into Dashboard, global search, empty states, and radiogroup accessibility polish. View-layer only — no schema, auth, RLS, or Supabase changes.
+
+### Added
+- **Sortable, sticky table headers** (sub-phase 2a) on Service History, PM Schedules, Install Base, and Audit Log. New `registerSortable()` helper attaches click + keyboard sort to any `<th data-sort>`. ▼/▲ indicators reflect direction; `aria-sort` is updated for screen readers. Headers stay pinned during scroll via `position: sticky`.
+- **Operational KPI status indicators** on Dashboard cards (sub-phase 2b → KPI Correction). Each card carries a status pill (good / warn / risk / info / muted) plus a secondary metric line. Incidents, PM Calls, and SLA Compliance also show a thin 3 px progress bar coloured by threshold. Replaces the original v1.2.0-2b SVG sparklines that were judged decorative rather than operational. New CSS: `.kpi-foot`, `.kpi-status`, `.kpi-bar-track`, `.kpi-bar-fill`. Added in commit `8606344`.
+- **Reports folded into Dashboard** as a collapsible `<details>` section (sub-phase 2c). The standalone Reports page route is removed; the three Reports panels (KPI Summary, Parts Failures, Customer Frequency) now live one click below the Dashboard KPIs. Sidebar gains one fewer nav item.
+- **Cmd+K global search** (sub-phase 2d). Topbar input plus absolute dropdown panel; cross-entity results across tickets, customers, and engineers. Keyboard-driven: ⌘K (Mac) / Ctrl+K to focus, ↑/↓ to navigate, Enter to open. Placeholder reads `Search tickets, customers, engineers… (⌘K)`.
+- **Empty states** (sub-phase 2e) for filtered tables (`renderHistory`, `renderAssets`, `renderAuditLog`) and the Dashboard open-tickets panel. New `_emptyStateHtml({ icon, headline, secondary, variant, colspan, inline })` helper. Closes audit finding D-07.
+- **Fieldset / radiogroup accessibility polish** (sub-phase 2f) on the ambiguity decision radios. Wrapper upgraded to `<fieldset>` + `<legend>`; inner div gets `role="radiogroup"` plus `aria-label`; each radio gets an explicit `aria-label`. The engineer drill-in modal was already fully a11y'd in 1b — no change needed there.
+
+### Changed
+- **Dashboard KPI card foot row** redesigned. The lower edge of each card now reads `[status pill] [secondary metric line]` (8 of 9 cards) or just `[status pill]` (Active Systems / Data Flags clean-state).
+- **Sidebar nav** decremented by one — Reports moved into Dashboard.
+- **About tab** version display now reads `Version 1.2.0` / `4 May 2026`.
+
+### Removed
+- **Decorative SVG sparklines** on Dashboard KPI cards. Four functions removed (~98 lines): `_ticketsByMonthSeries`, `_slaByMonthSeries`, `_mttrByMonthSeries`, `_sparkline`. Operational indicators replace them as a more useful signal density per panel.
+
+### Fixed
+- **`.kpi-foot` secondary text on narrow mobile widths.** Added `overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0` to non-pill children of `.kpi-foot`. Below ~420 px (2-col KPI grid, ~145 px content width), "3 parts pending" on the Open Tickets card and "2 outliers excl." on the MTTR card were being hard-clipped by the parent card's `overflow:hidden`. The truncation now ellipsizes gracefully rather than disappearing mid-word.
+
+### Notes
+- All 3 roles (admin/superadmin, manager, engineer/viewer) verified on staging at commit `8606344` before promotion. Restricted-page hashes (`/#/auditlog`, `/#/ambiguities`, `/#/engperf`) bounce to `/#/dashboard` for non-authorised roles. 0 app-side console errors observed across role transitions.
+- Bundle: ~476 → ~478 KB (estimated). CSS additions roughly offset by sparkline removal; net change is small.
+- Sub-phase manifest: 2a (sortable tables), 2b → KPI Correction (operational indicators), 2c (Reports into Dashboard), 2d (Cmd+K search), 2e (empty states), 2f (radiogroup polish) — 7 commits total on the release branch.
+- Companion PR: [#2](https://github.com/3iMedtech/mri-fieldops-dashboard/pull/2).
+
+---
+
 ## [1.1.0-db.0002] — 2026-05-03
 
 Database-layer security hardening for `audit_log`. No app code or VERSION changed.
